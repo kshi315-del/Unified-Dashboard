@@ -443,6 +443,22 @@ def transfer_capital():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/capital/<bot_id>/limit", methods=["GET"])
+@_auth_required
+def get_capital_limit(bot_id):
+    """Lightweight endpoint for bots to query their allocation.
+
+    Returns {"allocation_cents": N} or {"allocation_cents": null} if
+    the bot has no entry in capital.json.  No P&L or health calls.
+    """
+    store = _get_capital_store()
+    accounts = store.get_accounts()
+    acct = accounts.get(bot_id)
+    if acct is None:
+        return jsonify({"allocation_cents": None})
+    return jsonify({"allocation_cents": acct.get("allocation", 0)})
+
+
 @app.route("/api/capital/transfers", methods=["GET"])
 @_auth_required
 def get_capital_transfers():
