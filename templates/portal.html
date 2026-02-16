@@ -597,7 +597,7 @@ function renderCapital() {
     totalEl.textContent = '$' + (d.real_balance / 100).toFixed(2);
     totalEl.className = 'capital-total ' + pnlClass(d.real_balance);
   } else {
-    totalEl.textContent = 'N/A';
+    totalEl.textContent = '$' + (d.total_allocated / 100).toFixed(2) + ' allocated';
     totalEl.className = 'capital-total';
   }
   document.getElementById('capitalRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -610,14 +610,23 @@ function renderCapital() {
   const unCard = document.createElement('div');
   unCard.className = 'sub-card';
   unCard.style.borderLeftColor = 'var(--accent)';
-  const unBal = d.unallocated !== null ? d.unallocated : 0;
+  var unBal, unLabel, unSub;
+  if (d.real_balance !== null) {
+    unBal = d.unallocated !== null ? d.unallocated : 0;
+    unLabel = '$' + (Math.abs(unBal) / 100).toFixed(2);
+    unSub = 'Real balance ($' + (d.real_balance / 100).toFixed(2) + ') minus allocations ($' + (d.total_allocated / 100).toFixed(2) + ')';
+  } else {
+    unBal = 0;
+    unLabel = 'No Kalshi API key';
+    unSub = 'Total allocated: $' + (d.total_allocated / 100).toFixed(2) + ' across ' + d.accounts.length + ' bot' + (d.accounts.length !== 1 ? 's' : '') + '. Connect Kalshi API to see remaining balance.';
+  }
   unCard.innerHTML =
     '<div class="sub-card-header">' +
       '<span class="sub-card-label">Unallocated</span>' +
       '<span class="sub-card-badge">POOL</span>' +
     '</div>' +
-    '<div class="sub-card-balance ' + pnlClass(unBal) + '">' + (d.unallocated !== null ? '$' + (unBal / 100).toFixed(2) : 'N/A') + '</div>' +
-    '<div class="sub-card-bot">Real balance minus allocations</div>';
+    '<div class="sub-card-balance ' + pnlClass(unBal) + '">' + unLabel + '</div>' +
+    '<div class="sub-card-bot">' + unSub + '</div>';
   container.appendChild(unCard);
 
   // Per-bot cards
