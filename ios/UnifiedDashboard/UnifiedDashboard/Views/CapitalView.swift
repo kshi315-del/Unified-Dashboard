@@ -26,6 +26,7 @@ struct CapitalView: View {
     @State private var showAllocateSheet = false
     @State private var showTransferSheet = false
     @State private var showAllTransfers = false
+    @State private var cardsAppeared = false
 
     var body: some View {
         ScrollView {
@@ -46,11 +47,43 @@ struct CapitalView: View {
 
                 if isLoading && capital == nil {
                     LoadingCard()
+                    LoadingCard()
                 } else {
                     balanceHeader
+                        .offset(y: cardsAppeared ? 0 : 12)
+                        .opacity(cardsAppeared ? 1 : 0)
+
+                    // Total P&L summary
+                    if let accounts = capital?.accounts, !accounts.isEmpty {
+                        let totalPnl = accounts.reduce(0) { $0 + $1.pnl }
+                        HStack(spacing: 8) {
+                            Image(systemName: totalPnl >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Fmt.pnlColorCents(totalPnl))
+                            Text("Total P&L: \(Fmt.signedDollars(totalPnl))")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Fmt.pnlColorCents(totalPnl))
+                            Spacer()
+                            Text("\(accounts.count) bot\(accounts.count == 1 ? "" : "s")")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.textDim)
+                        }
+                        .padding(.horizontal, 4)
+                        .offset(y: cardsAppeared ? 0 : 12)
+                        .opacity(cardsAppeared ? 1 : 0)
+                    }
+
                     accountCards
+                        .offset(y: cardsAppeared ? 0 : 16)
+                        .opacity(cardsAppeared ? 1 : 0)
+
                     actionButtons
+                        .offset(y: cardsAppeared ? 0 : 20)
+                        .opacity(cardsAppeared ? 1 : 0)
+
                     transferHistorySection
+                        .offset(y: cardsAppeared ? 0 : 24)
+                        .opacity(cardsAppeared ? 1 : 0)
                 }
 
                 if let error {
@@ -450,12 +483,18 @@ struct CapitalView: View {
             async let xfer = client.fetchTransfers()
             let (capResult, xferResult) = try await (cap, xfer)
             await MainActor.run {
+                let wasLoading = self.isLoading
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.capital = capResult
                     self.transfers = xferResult.transfers
                     self.lastUpdated = Date()
                     self.error = nil
                     self.isLoading = false
+                }
+                if wasLoading {
+                    withAnimation(.easeOut(duration: 0.5).delay(0.05)) {
+                        self.cardsAppeared = true
+                    }
                 }
             }
         } catch {

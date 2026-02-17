@@ -142,16 +142,31 @@ struct GlowNumber: View {
 // MARK: - Loading Placeholder
 
 struct LoadingCard: View {
+    @State private var shimmer = false
+
     var body: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .tint(.textDim)
-            Text("Loading...")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.textDim)
+        VStack(spacing: 14) {
+            // Fake header bar
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.textDim.opacity(0.08))
+                .frame(height: 14)
+                .frame(maxWidth: 120, alignment: .leading)
+            // Fake hero number
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.textDim.opacity(0.06))
+                .frame(height: 32)
+                .frame(maxWidth: 200, alignment: .leading)
+            // Fake subtitle
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.textDim.opacity(0.05))
+                .frame(height: 12)
+                .frame(maxWidth: 160, alignment: .leading)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 24)
+        .opacity(shimmer ? 0.4 : 1.0)
+        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: shimmer)
+        .onAppear { shimmer = true }
         .cardStyle()
     }
 }
