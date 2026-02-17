@@ -25,6 +25,7 @@ struct CapitalView: View {
 
     @State private var showAllocateSheet = false
     @State private var showTransferSheet = false
+    @State private var showAllTransfers = false
 
     var body: some View {
         ScrollView {
@@ -166,9 +167,25 @@ struct CapitalView: View {
 
     // MARK: - Transfer history
 
+    private var visibleTransfers: [Transfer] {
+        showAllTransfers ? transfers : Array(transfers.prefix(3))
+    }
+
     private var transferHistorySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "RECENT TRANSFERS", icon: "clock.arrow.circlepath")
+            HStack {
+                SectionHeader(title: "RECENT TRANSFERS", icon: "clock.arrow.circlepath")
+                Spacer()
+                if transfers.count > 3 {
+                    Text("\(transfers.count)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.portalBlue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.portalBlue.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
 
             if transfers.isEmpty {
                 EmptyState(
@@ -177,12 +194,17 @@ struct CapitalView: View {
                     message: "Transfers between accounts will appear here"
                 )
             } else {
-                ForEach(transfers) { t in
+                ForEach(visibleTransfers) { t in
+                    let isToPool = t.to == "unallocated"
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.right")
+                        Image(systemName: isToPool ? "arrow.down.left" : "arrow.up.right")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.portalBlue.opacity(0.6))
-                            .frame(width: 20)
+                            .foregroundStyle(isToPool ? .portalGreen.opacity(0.7) : .portalBlue.opacity(0.7))
+                            .frame(width: 22, height: 22)
+                            .background(
+                                (isToPool ? Color.portalGreen : .portalBlue).opacity(0.08)
+                            )
+                            .clipShape(Circle())
 
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
@@ -205,12 +227,32 @@ struct CapitalView: View {
 
                         Text(Fmt.dollars(t.amount))
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.textPrimary)
+                            .foregroundStyle(isToPool ? .portalGreen : .textPrimary)
                     }
                     .padding(.vertical, 6)
 
-                    if t.id != transfers.last?.id {
+                    if t.id != visibleTransfers.last?.id {
                         Divider().overlay(Color.cardBorder)
+                    }
+                }
+
+                // Show All / Show Less toggle
+                if transfers.count > 3 {
+                    Button {
+                        Haptic.tap()
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showAllTransfers.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(showAllTransfers ? "Show Less" : "Show All \(transfers.count)")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            Image(systemName: showAllTransfers ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .foregroundStyle(.portalBlue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                     }
                 }
             }
