@@ -1,8 +1,12 @@
 """Unified portal — proxies to per-bot dashboards and aggregates overview."""
 
+import json
 import logging
 import os
 import re
+import subprocess
+import threading
+
 import requests
 from flask import Flask, request, Response, jsonify, render_template
 from functools import wraps
@@ -470,6 +474,92 @@ def get_capital_transfers():
     except Exception as e:
         logger.exception("Failed to fetch transfers")
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Claude Code integration
+# ---------------------------------------------------------------------------
+
+CLAUDE_ENABLED = os.environ.get("CLAUDE_ENABLED", "1") == "1"
+CLAUDE_WORK_DIR = os.environ.get("CLAUDE_WORK_DIR",
+                                  os.path.dirname(os.path.abspath(__file__)))
+CLAUDE_MAX_TURNS = int(os.environ.get("CLAUDE_MAX_TURNS", "10"))
+
+_claude_lock = threading.Lock()
+
+
+@app.route("/api/claude", methods=["POST"])
+@_auth_required
+def claude_chat():
+    """Run a Claude Code prompt and stream results via SSE."""
+    if not CLAUDE_ENABLED:
+        return jsonify({"error": "Claude Code integration is disabled. "
+                        "Set CLAUDE_ENABLED=1 to enable."}), 403
+
+    data = request.get_json(force=True)
+    prompt = data.get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+
+    if not _claude_lock.acquire(blocking=False):
+        return jsonify({"error": "Another Claude request is already running. "
+                        "Please wait for it to finish."}), 429
+
+    def generate():
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    "claude", "-p",
+                    "--output-format", "stream-json",
+                    "--max-turns", str(CLAUDE_MAX_TURNS),
+                    prompt,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=CLAUDE_WORK_DIR,
+                text=True,
+                bufsize=1,
+            )
+            for line in proc.stdout:
+                line = line.strip()
+                if line:
+                    yield f"data: {line}\n\n"
+            proc.wait(timeout=300)
+            if proc.returncode != 0:
+                err = proc.stderr.read()
+                yield f"data: {json.dumps({'type': 'error', 'error': err})}\n\n"
+            yield "data: [DONE]\n\n"
+        except FileNotFoundError:
+            yield ("data: " + json.dumps({
+                "type": "error",
+                "error": "claude CLI not found. "
+                         "Install: npm install -g @anthropic-ai/claude-code"
+            }) + "\n\n")
+            yield "data: [DONE]\n\n"
+        except subprocess.TimeoutExpired:
+            if proc:
+                proc.kill()
+            yield ("data: " + json.dumps({
+                "type": "error",
+                "error": "Request timed out (5 min limit)"
+            }) + "\n\n")
+            yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            pass
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+        finally:
+            if proc and proc.poll() is None:
+                proc.kill()
+            _claude_lock.release()
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------
