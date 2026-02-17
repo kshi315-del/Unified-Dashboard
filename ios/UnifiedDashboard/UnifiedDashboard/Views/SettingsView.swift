@@ -258,6 +258,16 @@ struct SettingsView: View {
                     }
                     Divider().overlay(Color.cardBorder)
                     HStack {
+                        Text("Version")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.textDim)
+                        Spacer()
+                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.textPrimary)
+                    }
+                    Divider().overlay(Color.cardBorder)
+                    HStack {
                         Text("Status")
                             .font(.system(size: 13, design: .monospaced))
                             .foregroundStyle(.textDim)
@@ -270,6 +280,18 @@ struct SettingsView: View {
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(settings.isConfigured ? .portalGreen : .portalRed)
                         }
+                    }
+                    Divider().overlay(Color.cardBorder)
+                    HStack {
+                        Text("Server")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.textDim)
+                        Spacer()
+                        Text(settings.serverURL.isEmpty ? "—" : settings.serverURL)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.textDim)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
                 .cardStyle()
