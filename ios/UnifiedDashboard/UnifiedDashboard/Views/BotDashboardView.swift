@@ -20,7 +20,7 @@ struct BotDashboardView: View {
                 Spacer()
                 Button {
                     Haptic.tap()
-                    reloadWebView()
+                    Task { await refreshAll() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 14, weight: .semibold))
@@ -183,6 +183,7 @@ struct BotDashboardView: View {
         }
         .background(Color.portalBg)
         .task { await loadBots() }
+        .onAppear { Task { await loadBots() } }
     }
 
     // MARK: - Load bots from API
@@ -205,6 +206,12 @@ struct BotDashboardView: View {
                 botsLoaded = true
             }
         }
+    }
+
+    private func refreshAll() async {
+        await loadBots()
+        reloadWebView()
+        Haptic.success()
     }
 
     private func reloadWebView() {
