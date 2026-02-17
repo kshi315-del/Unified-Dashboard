@@ -290,46 +290,71 @@ struct CapitalView: View {
     private var allocateSheet: some View {
         NavigationStack {
             Form {
-                Section("Bot") {
+                Section {
                     TextField("Bot ID (e.g. btc-range)", text: $allocBotId)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Label (e.g. BTC Range)", text: $allocLabel)
+                } header: {
+                    Text("Bot")
+                        .foregroundStyle(.textDim)
                 }
-                Section("Amount") {
+                .listRowBackground(Color.elevatedBg)
+
+                Section {
                     HStack {
                         Text("$")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.textDim)
                         TextField("0.00", text: $allocAmount)
                             .keyboardType(.decimalPad)
                     }
+                } header: {
+                    Text("Amount")
+                        .foregroundStyle(.textDim)
                 }
+                .listRowBackground(Color.elevatedBg)
+
                 if !allocFeedback.isEmpty {
                     Section {
                         Label(allocFeedback, systemImage: allocIsError ? "xmark.circle" : "checkmark.circle")
-                            .foregroundStyle(allocIsError ? .red : .green)
-                            .font(.caption)
+                            .foregroundStyle(allocIsError ? .portalRed : .portalGreen)
+                            .font(.system(.caption, design: .monospaced))
                     }
+                    .listRowBackground(
+                        (allocIsError ? Color.portalRed : .portalGreen).opacity(0.08)
+                    )
                 }
+
                 Section {
                     Button {
                         Task { await doAllocate() }
                     } label: {
                         Text("Allocate Capital")
                             .frame(maxWidth: .infinity)
-                            .font(.headline)
+                            .font(.system(.headline, design: .monospaced))
+                            .foregroundStyle(.white)
                     }
                     .disabled(allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty)
+                    .listRowBackground(
+                        (allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty)
+                            ? Color.portalGreen.opacity(0.3)
+                            : Color.portalGreen
+                    )
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.portalBg)
+            .foregroundStyle(.textPrimary)
             .navigationTitle("Allocate Capital")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { showAllocateSheet = false }
                 }
             }
         }
+        .presentationBackground(Color.portalBg)
     }
 
     // MARK: - Transfer sheet
@@ -337,56 +362,86 @@ struct CapitalView: View {
     private var transferSheet: some View {
         NavigationStack {
             Form {
-                Section("From") {
+                Section {
                     Picker("Source", selection: $xferFrom) {
                         Text("Unallocated").tag("unallocated")
                         ForEach(capital?.accounts ?? []) { a in
                             Text("\(a.label) (\(Fmt.dollars(a.allocation)))").tag(a.id)
                         }
                     }
+                } header: {
+                    Text("From")
+                        .foregroundStyle(.textDim)
                 }
-                Section("To") {
+                .listRowBackground(Color.elevatedBg)
+
+                Section {
                     Picker("Destination", selection: $xferTo) {
                         Text("Unallocated").tag("unallocated")
                         ForEach(capital?.accounts ?? []) { a in
                             Text("\(a.label) (\(Fmt.dollars(a.allocation)))").tag(a.id)
                         }
                     }
+                } header: {
+                    Text("To")
+                        .foregroundStyle(.textDim)
                 }
-                Section("Amount") {
+                .listRowBackground(Color.elevatedBg)
+
+                Section {
                     HStack {
                         Text("$")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.textDim)
                         TextField("0.00", text: $xferAmount)
                             .keyboardType(.decimalPad)
                     }
+                } header: {
+                    Text("Amount")
+                        .foregroundStyle(.textDim)
                 }
+                .listRowBackground(Color.elevatedBg)
+
                 if !xferFeedback.isEmpty {
                     Section {
                         Label(xferFeedback, systemImage: xferIsError ? "xmark.circle" : "checkmark.circle")
-                            .foregroundStyle(xferIsError ? .red : .green)
-                            .font(.caption)
+                            .foregroundStyle(xferIsError ? .portalRed : .portalGreen)
+                            .font(.system(.caption, design: .monospaced))
                     }
+                    .listRowBackground(
+                        (xferIsError ? Color.portalRed : .portalGreen).opacity(0.08)
+                    )
                 }
+
                 Section {
                     Button {
                         Task { await doTransfer() }
                     } label: {
                         Text("Transfer Funds")
                             .frame(maxWidth: .infinity)
-                            .font(.headline)
+                            .font(.system(.headline, design: .monospaced))
+                            .foregroundStyle(.white)
                     }
                     .disabled(xferFrom == xferTo || xferAmount.isEmpty)
+                    .listRowBackground(
+                        (xferFrom == xferTo || xferAmount.isEmpty)
+                            ? Color.portalBlue.opacity(0.3)
+                            : Color.portalBlue
+                    )
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.portalBg)
+            .foregroundStyle(.textPrimary)
             .navigationTitle("Transfer Funds")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { showTransferSheet = false }
                 }
             }
         }
+        .presentationBackground(Color.portalBg)
     }
 
     // MARK: - Actions
