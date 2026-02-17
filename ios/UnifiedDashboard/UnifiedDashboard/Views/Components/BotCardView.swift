@@ -10,15 +10,9 @@ struct BotCardView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header row
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(bot.name)
-                        .font(.system(.subheadline, design: .monospaced, weight: .bold))
-                        .foregroundStyle(.textPrimary)
-                    Text(bot.mode)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(accentColor.opacity(0.8))
-                        .tracking(0.5)
-                }
+                Text(bot.name)
+                    .font(.system(.subheadline, design: .monospaced, weight: .bold))
+                    .foregroundStyle(.textPrimary)
                 Spacer()
                 healthBadge
             }
@@ -37,14 +31,9 @@ struct BotCardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 // Hero P&L
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(Fmt.pnl(bot.pnl))
-                        .font(.system(size: 26, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Fmt.pnlColor(bot.pnl))
-                    Text("P&L")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.textDim)
-                }
+                Text(Fmt.pnl(bot.pnl))
+                    .font(.system(size: 26, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Fmt.pnlColor(bot.pnl))
 
                 // Stats row
                 Divider().overlay(Color.cardBorder)

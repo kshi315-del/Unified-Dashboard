@@ -103,45 +103,38 @@ struct GlowNumber: View {
     var subtitle: String? = nil
 
     var body: some View {
-        VStack(spacing: 6) {
-            Text(label)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(.textDim)
-                .tracking(1.5)
+        VStack(alignment: .leading, spacing: 8) {
+            // Header row: label + chart icon
+            HStack {
+                Text(label)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.textDim)
+                Spacer()
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(color)
+            }
 
+            // Hero number
             Text(value)
-                .font(.system(size: 36, weight: .bold, design: .monospaced))
+                .font(.system(size: 34, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
-                .shadow(color: color.opacity(0.4), radius: 12, y: 2)
 
+            // Currency label
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(.textDim)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.cardBg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(
-                            LinearGradient(
-                                colors: [color.opacity(0.3), color.opacity(0.05)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1
-                        )
-                )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.cardBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.cardBorder, lineWidth: 1)
         )
-        .overlay(alignment: .top) {
-            color.opacity(0.08)
-                .frame(height: 1)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-        }
     }
 }
 

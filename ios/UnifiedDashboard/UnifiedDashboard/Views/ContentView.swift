@@ -57,6 +57,6 @@ struct MainTabView: View {
                 }
                 .tag(3)
         }
-        .tint(.portalBlue)
+        .tint(.portalGreen)
     }
 }

@@ -9,79 +9,58 @@ struct OverviewView: View {
     @State private var isLoading = true
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    if isLoading && overview == nil {
-                        LoadingCard()
-                    } else if let overview {
-                        // Hero P&L
-                        GlowNumber(
-                            label: "TOTAL P&L",
-                            value: Fmt.pnl(overview.totalPnl),
-                            color: Fmt.pnlColor(overview.totalPnl),
-                            subtitle: lastUpdated.map { "Updated \(Fmt.relativeTime($0))" }
-                        )
+        ScrollView {
+            VStack(spacing: 14) {
+                // Drag indicator
+                Capsule()
+                    .fill(Color.textDim.opacity(0.4))
+                    .frame(width: 36, height: 5)
+                    .padding(.top, 8)
 
-                        // Bot count summary
-                        let healthy = overview.bots.values.filter { $0.healthy && $0.error == nil }.count
-                        let total = overview.bots.count
-                        HStack(spacing: 16) {
-                            HStack(spacing: 5) {
-                                Circle().fill(.portalGreen).frame(width: 6, height: 6)
-                                Text("\(healthy) healthy")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.textDim)
-                            }
-                            if healthy < total {
-                                HStack(spacing: 5) {
-                                    Circle().fill(.portalRed).frame(width: 6, height: 6)
-                                    Text("\(total - healthy) issues")
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.textDim)
-                                }
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 4)
+                if isLoading && overview == nil {
+                    LoadingCard()
+                } else if let overview {
+                    // Hero P&L
+                    GlowNumber(
+                        label: "Total P&L",
+                        value: Fmt.pnl(overview.totalPnl),
+                        color: Fmt.pnlColor(overview.totalPnl),
+                        subtitle: "USD"
+                    )
 
-                        // Bot cards
-                        let sortedBots = overview.bots.sorted(by: { $0.key < $1.key })
-                        ForEach(sortedBots, id: \.key) { botId, bot in
-                            var mutBot = bot
-                            mutBot.id = botId
-                            BotCardView(botId: botId, bot: mutBot)
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-                    }
-
-                    if let error {
-                        HStack(spacing: 8) {
-                            Image(systemName: "wifi.exclamationmark")
-                                .foregroundStyle(.portalRed)
-                            Text(error)
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle(.portalRed)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(.portalRed.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(.portalRed.opacity(0.2), lineWidth: 1)
-                        )
+                    // Bot cards
+                    let sortedBots = overview.bots.sorted(by: { $0.key < $1.key })
+                    ForEach(sortedBots, id: \.key) { botId, bot in
+                        var mutBot = bot
+                        mutBot.id = botId
+                        BotCardView(botId: botId, bot: mutBot)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
-                .padding()
-                .animation(.easeInOut(duration: 0.3), value: overview?.totalPnl)
+
+                if let error {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .foregroundStyle(.portalRed)
+                        Text(error)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.portalRed)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.portalRed.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(.portalRed.opacity(0.2), lineWidth: 1)
+                    )
+                }
             }
-            .background(Color.portalBg)
-            .navigationTitle("Portfolio")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .refreshable { await fetchOnce() }
+            .padding()
+            .animation(.easeInOut(duration: 0.3), value: overview?.totalPnl)
         }
+        .background(Color.portalBg)
+        .refreshable { await fetchOnce() }
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
     }
