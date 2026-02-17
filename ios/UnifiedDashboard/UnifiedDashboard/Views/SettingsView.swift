@@ -9,12 +9,12 @@ struct SettingsView: View {
     @State private var isTesting = false
 
     var body: some View {
-        NavigationStack {
-            if isInitialSetup {
+        if isInitialSetup {
+            NavigationStack {
                 onboardingLayout
-            } else {
-                settingsForm
             }
+        } else {
+            settingsForm
         }
     }
 
@@ -151,6 +151,7 @@ struct SettingsView: View {
             .padding(24)
         }
         .background(Color.portalBg)
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Setup")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -161,6 +162,15 @@ struct SettingsView: View {
     private var settingsForm: some View {
         ScrollView {
             VStack(spacing: 14) {
+                // Screen header (matches Portfolio/Capital/Dashboards)
+                HStack {
+                    Text("Settings")
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.textPrimary)
+                    Spacer()
+                }
+                .padding(.top, 4)
+
                 // Server
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeader(title: "SERVER", icon: "server.rack")
@@ -230,6 +240,7 @@ struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .disabled(!settings.isConfigured || isTesting)
+                    .opacity(settings.isConfigured ? 1 : 0.4)
 
                     if let result = testResult {
                         HStack(spacing: 6) {
@@ -299,9 +310,7 @@ struct SettingsView: View {
             .padding()
         }
         .background(Color.portalBg)
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Test

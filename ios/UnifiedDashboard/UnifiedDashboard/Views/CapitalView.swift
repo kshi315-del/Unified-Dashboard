@@ -27,6 +27,9 @@ struct CapitalView: View {
     @State private var showTransferSheet = false
     @State private var showAllTransfers = false
     @State private var cardsAppeared = false
+    @State private var removeTarget: String?
+    @State private var isAllocating = false
+    @State private var isTransferring = false
 
     var body: some View {
         ScrollView {
@@ -96,9 +99,29 @@ struct CapitalView: View {
             .animation(.easeInOut(duration: 0.3), value: capital?.totalAllocated)
         }
         .background(Color.portalBg)
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await fetchAll() }
         .sheet(isPresented: $showAllocateSheet) { allocateSheet }
         .sheet(isPresented: $showTransferSheet) { transferSheet }
+        .alert("Remove Allocation", isPresented: Binding(
+            get: { removeTarget != nil },
+            set: { if !$0 { removeTarget = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { removeTarget = nil }
+            Button("Remove", role: .destructive) {
+                if let id = removeTarget {
+                    Task { await removeAllocation(id) }
+                }
+                removeTarget = nil
+            }
+        } message: {
+            if let id = removeTarget,
+               let label = capital?.accounts.first(where: { $0.id == id })?.label {
+                Text("This will deallocate all capital from \(label). This action cannot be undone.")
+            } else {
+                Text("This will remove the allocation. This action cannot be undone.")
+            }
+        }
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
     }
@@ -146,7 +169,7 @@ struct CapitalView: View {
                         account: account,
                         totalAllocated: capital?.totalAllocated ?? 0
                     ) {
-                        Task { await removeAllocation(account.id) }
+                        removeTarget = account.id
                     }
                 }
             }
@@ -342,14 +365,19 @@ struct CapitalView: View {
                     Button {
                         Task { await doAllocate() }
                     } label: {
-                        Text("Allocate Capital")
-                            .frame(maxWidth: .infinity)
-                            .font(.system(.headline, design: .monospaced))
-                            .foregroundStyle(.white)
+                        HStack(spacing: 8) {
+                            if isAllocating {
+                                ProgressView().tint(.white)
+                            }
+                            Text(isAllocating ? "Allocating..." : "Allocate Capital")
+                                .frame(maxWidth: .infinity)
+                                .font(.system(.headline, design: .monospaced))
+                                .foregroundStyle(.white)
+                        }
                     }
-                    .disabled(allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty)
+                    .disabled(allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty || isAllocating)
                     .listRowBackground(
-                        (allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty)
+                        (allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty || isAllocating)
                             ? Color.portalGreen.opacity(0.3)
                             : Color.portalGreen
                     )
@@ -429,14 +457,19 @@ struct CapitalView: View {
                     Button {
                         Task { await doTransfer() }
                     } label: {
-                        Text("Transfer Funds")
-                            .frame(maxWidth: .infinity)
-                            .font(.system(.headline, design: .monospaced))
-                            .foregroundStyle(.white)
+                        HStack(spacing: 8) {
+                            if isTransferring {
+                                ProgressView().tint(.white)
+                            }
+                            Text(isTransferring ? "Transferring..." : "Transfer Funds")
+                                .frame(maxWidth: .infinity)
+                                .font(.system(.headline, design: .monospaced))
+                                .foregroundStyle(.white)
+                        }
                     }
-                    .disabled(xferFrom == xferTo || xferAmount.isEmpty)
+                    .disabled(xferFrom == xferTo || xferAmount.isEmpty || isTransferring)
                     .listRowBackground(
-                        (xferFrom == xferTo || xferAmount.isEmpty)
+                        (xferFrom == xferTo || xferAmount.isEmpty || isTransferring)
                             ? Color.portalBlue.opacity(0.3)
                             : Color.portalBlue
                     )
@@ -466,17 +499,27 @@ struct CapitalView: View {
             Haptic.error()
             return
         }
+        isAllocating = true
         let client = APIClient(settings: settings)
         do {
             try await client.allocateCapital(botId: allocBotId, label: allocLabel, amount: amount)
             allocFeedback = "Allocated $\(String(format: "%.2f", amount)) to \(allocLabel)"
             allocIsError = false
             allocAmount = ""
+            isAllocating = false
             Haptic.success()
             await fetchAll()
+            try? await Task.sleep(for: .seconds(1.2))
+            await MainActor.run {
+                showAllocateSheet = false
+                allocFeedback = ""
+                allocBotId = ""
+                allocLabel = ""
+            }
         } catch {
             allocFeedback = error.localizedDescription
             allocIsError = true
+            isAllocating = false
             Haptic.error()
         }
     }
@@ -488,17 +531,27 @@ struct CapitalView: View {
             Haptic.error()
             return
         }
+        isTransferring = true
         let client = APIClient(settings: settings)
         do {
             try await client.transferCapital(from: xferFrom, to: xferTo, amount: amount)
             xferFeedback = "Transfer complete"
             xferIsError = false
             xferAmount = ""
+            isTransferring = false
             Haptic.success()
             await fetchAll()
+            try? await Task.sleep(for: .seconds(1.2))
+            await MainActor.run {
+                showTransferSheet = false
+                xferFeedback = ""
+                xferFrom = "unallocated"
+                xferTo = "unallocated"
+            }
         } catch {
             xferFeedback = error.localizedDescription
             xferIsError = true
+            isTransferring = false
             Haptic.error()
         }
     }

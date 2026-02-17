@@ -34,6 +34,8 @@ struct BotCardView: View {
                 Text(Fmt.pnl(bot.pnl))
                     .font(.system(size: 26, weight: .bold, design: .monospaced))
                     .foregroundStyle(Fmt.pnlColor(bot.pnl))
+                    .shadow(color: Fmt.pnlColor(bot.pnl).opacity(0.25), radius: 6, x: 0, y: 2)
+                    .shadow(color: Fmt.pnlColor(bot.pnl).opacity(0.08), radius: 16, x: 0, y: 4)
 
                 // Stats row
                 Divider().overlay(Color.cardBorder)

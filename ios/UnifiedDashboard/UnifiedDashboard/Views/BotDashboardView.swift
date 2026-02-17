@@ -4,15 +4,11 @@ import WebKit
 struct BotDashboardView: View {
     @EnvironmentObject var settings: ServerSettings
 
-    private let bots: [(id: String, name: String, short: String, color: String)] = [
-        ("weather", "Weather Bot", "WX", "#4CAF50"),
-        ("btc-range", "BTC Range Arb", "BTC", "#f7931a"),
-        ("sports-arb", "Sports Arb", "SPT", "#58a6ff"),
-    ]
-
-    @State private var selectedBot: String = "weather"
+    @State private var bots: [(id: String, name: String, short: String, color: String)] = []
+    @State private var selectedBot: String = ""
     @State private var isWebViewLoading = true
     @State private var webViewError: String?
+    @State private var botsLoaded = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,12 +20,7 @@ struct BotDashboardView: View {
                 Spacer()
                 Button {
                     Haptic.tap()
-                    isWebViewLoading = true
-                    let current = selectedBot
-                    selectedBot = ""
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        selectedBot = current
-                    }
+                    reloadWebView()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 14, weight: .semibold))
@@ -44,140 +35,186 @@ struct BotDashboardView: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            // Bot selector bar
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(bots, id: \.id) { bot in
-                        let isSelected = selectedBot == bot.id
-                        Button {
-                            Haptic.tap()
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedBot = bot.id
-                                isWebViewLoading = true
-                                webViewError = nil
+            if !botsLoaded {
+                Spacer()
+                ProgressView()
+                    .tint(.textDim)
+                Text("Loading bots...")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.textDim)
+                    .padding(.top, 8)
+                Spacer()
+            } else if bots.isEmpty {
+                Spacer()
+                EmptyState(
+                    icon: "cpu",
+                    title: "No Bots Found",
+                    message: "No bots were returned by the server"
+                )
+                Spacer()
+            } else {
+                // Bot selector bar
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(bots, id: \.id) { bot in
+                            let isSelected = selectedBot == bot.id
+                            Button {
+                                Haptic.tap()
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedBot = bot.id
+                                    isWebViewLoading = true
+                                    webViewError = nil
+                                }
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Circle()
+                                        .fill(Fmt.hexColor(bot.color))
+                                        .frame(width: 7, height: 7)
+                                    Text(bot.name)
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(
+                                    isSelected
+                                        ? Fmt.hexColor(bot.color).opacity(0.15)
+                                        : Color.cardBg
+                                )
+                                .foregroundStyle(isSelected ? .white : .textDim)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(
+                                            isSelected
+                                                ? Fmt.hexColor(bot.color).opacity(0.5)
+                                                : Color.cardBorder,
+                                            lineWidth: isSelected ? 1.5 : 1
+                                        )
+                                )
                             }
-                        } label: {
-                            HStack(spacing: 7) {
-                                Circle()
-                                    .fill(Fmt.hexColor(bot.color))
-                                    .frame(width: 7, height: 7)
-                                Text(bot.name)
-                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(
-                                isSelected
-                                    ? Fmt.hexColor(bot.color).opacity(0.15)
-                                    : Color.cardBg
-                            )
-                            .foregroundStyle(isSelected ? .white : .textDim)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(
-                                        isSelected
-                                            ? Fmt.hexColor(bot.color).opacity(0.5)
-                                            : Color.cardBorder,
-                                        lineWidth: isSelected ? 1.5 : 1
-                                    )
-                            )
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-            .overlay(alignment: .bottom) {
-                Color.cardBorder.frame(height: 1)
-            }
-
-            // Bot stats strip
-            if let bot = bots.first(where: { $0.id == selectedBot }) {
-                HStack(spacing: 0) {
-                    StatPill(label: "BOT", value: bot.short, color: Fmt.hexColor(bot.color))
-                    StatPill(label: "STATUS", value: "Active", color: .portalGreen)
-                    StatPill(label: "UPTIME", value: "99.8%", color: .textPrimary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.cardBg)
                 .overlay(alignment: .bottom) {
                     Color.cardBorder.frame(height: 1)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
 
-            // Loading bar
-            if isWebViewLoading {
-                ProgressView()
-                    .progressViewStyle(.linear)
-                    .tint(.portalGreen)
-            }
-
-            // WebView
-            if let base = settings.baseURL {
-                if let webError = webViewError {
-                    Spacer()
-                    VStack(spacing: 14) {
-                        EmptyState(
-                            icon: "exclamationmark.triangle",
-                            title: "Failed to Load",
-                            message: webError
-                        )
-                        Button {
-                            Haptic.tap()
-                            webViewError = nil
-                            isWebViewLoading = true
-                            let current = selectedBot
-                            selectedBot = ""
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                selectedBot = current
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 12, weight: .bold))
-                                Text("Retry")
-                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            }
-                            .foregroundStyle(.portalBlue)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(.portalBlue.opacity(0.1))
-                            .clipShape(Capsule())
-                        }
+                // Bot stats strip
+                if let bot = bots.first(where: { $0.id == selectedBot }) {
+                    HStack(spacing: 0) {
+                        StatPill(label: "BOT", value: bot.short, color: Fmt.hexColor(bot.color))
+                        StatPill(label: "STATUS", value: "Active", color: .portalGreen)
+                        StatPill(label: "UPTIME", value: "99.8%", color: .textPrimary)
                     }
-                    Spacer()
-                } else {
-                    let dashURL = base.appendingPathComponent("/bot/\(selectedBot)/")
-                    BotWebView(
-                        url: dashURL,
-                        authHeader: settings.basicAuthHeader,
-                        onFinishLoading: {
-                            withAnimation { isWebViewLoading = false }
-                        },
-                        onError: { errorMsg in
-                            withAnimation {
-                                isWebViewLoading = false
-                                webViewError = errorMsg
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.cardBg)
+                    .overlay(alignment: .bottom) {
+                        Color.cardBorder.frame(height: 1)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Loading bar
+                if isWebViewLoading {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(.portalGreen)
+                }
+
+                // WebView
+                if let base = settings.baseURL {
+                    if let webError = webViewError {
+                        Spacer()
+                        VStack(spacing: 14) {
+                            EmptyState(
+                                icon: "exclamationmark.triangle",
+                                title: "Failed to Load",
+                                message: webError
+                            )
+                            Button {
+                                Haptic.tap()
+                                reloadWebView()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 12, weight: .bold))
+                                    Text("Retry")
+                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                }
+                                .foregroundStyle(.portalBlue)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(.portalBlue.opacity(0.1))
+                                .clipShape(Capsule())
                             }
                         }
+                        Spacer()
+                    } else if !selectedBot.isEmpty {
+                        let dashURL = base.appendingPathComponent("/bot/\(selectedBot)/")
+                        BotWebView(
+                            url: dashURL,
+                            authHeader: settings.basicAuthHeader,
+                            onFinishLoading: {
+                                withAnimation { isWebViewLoading = false }
+                            },
+                            onError: { errorMsg in
+                                withAnimation {
+                                    isWebViewLoading = false
+                                    webViewError = errorMsg
+                                }
+                            }
+                        )
+                        .id(selectedBot)
+                    }
+                } else {
+                    Spacer()
+                    EmptyState(
+                        icon: "server.rack",
+                        title: "Not Connected",
+                        message: "Set your server URL in Settings"
                     )
-                    .id(selectedBot)
+                    Spacer()
                 }
-            } else {
-                Spacer()
-                EmptyState(
-                    icon: "server.rack",
-                    title: "Not Connected",
-                    message: "Set your server URL in Settings"
-                )
-                Spacer()
             }
         }
         .background(Color.portalBg)
+        .task { await loadBots() }
+    }
+
+    // MARK: - Load bots from API
+
+    private func loadBots() async {
+        let client = APIClient(settings: settings)
+        do {
+            let overview = try await client.fetchOverview()
+            let sorted = overview.bots.sorted(by: { $0.key < $1.key })
+            let mapped = sorted.map { (id: $0.key, name: $0.value.name, short: $0.value.short, color: $0.value.color) }
+            await MainActor.run {
+                self.bots = mapped
+                if selectedBot.isEmpty, let first = mapped.first {
+                    selectedBot = first.id
+                }
+                botsLoaded = true
+            }
+        } catch {
+            await MainActor.run {
+                botsLoaded = true
+            }
+        }
+    }
+
+    private func reloadWebView() {
+        webViewError = nil
+        isWebViewLoading = true
+        let current = selectedBot
+        selectedBot = ""
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            selectedBot = current
+        }
     }
 }
 
@@ -196,6 +233,16 @@ struct BotWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+
+        // Inject dark background CSS so pages don't flash white
+        let darkCSS = """
+        var style = document.createElement('style');
+        style.textContent = 'html, body { background-color: #0a0e14 !important; color-scheme: dark; }';
+        document.documentElement.appendChild(style);
+        """
+        let script = WKUserScript(source: darkCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        config.userContentController.addUserScript(script)
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         webView.backgroundColor = UIColor(Color.portalBg)

@@ -10,11 +10,11 @@ class ServerSettings: ObservableObject {
     }
 
     @Published var username: String {
-        didSet { UserDefaults.standard.set(username, forKey: Self.usernameKey) }
+        didSet { KeychainHelper.save(username, for: Self.usernameKey) }
     }
 
     @Published var password: String {
-        didSet { UserDefaults.standard.set(password, forKey: Self.passwordKey) }
+        didSet { KeychainHelper.save(password, for: Self.passwordKey) }
     }
 
     var baseURL: URL? {
@@ -34,7 +34,18 @@ class ServerSettings: ObservableObject {
 
     init() {
         self.serverURL = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? ""
-        self.username = UserDefaults.standard.string(forKey: Self.usernameKey) ?? ""
-        self.password = UserDefaults.standard.string(forKey: Self.passwordKey) ?? ""
+
+        // Migrate from UserDefaults to Keychain if needed
+        if let legacyUser = UserDefaults.standard.string(forKey: Self.usernameKey), !legacyUser.isEmpty {
+            KeychainHelper.save(legacyUser, for: Self.usernameKey)
+            UserDefaults.standard.removeObject(forKey: Self.usernameKey)
+        }
+        if let legacyPass = UserDefaults.standard.string(forKey: Self.passwordKey), !legacyPass.isEmpty {
+            KeychainHelper.save(legacyPass, for: Self.passwordKey)
+            UserDefaults.standard.removeObject(forKey: Self.passwordKey)
+        }
+
+        self.username = KeychainHelper.load(for: Self.usernameKey) ?? ""
+        self.password = KeychainHelper.load(for: Self.passwordKey) ?? ""
     }
 }

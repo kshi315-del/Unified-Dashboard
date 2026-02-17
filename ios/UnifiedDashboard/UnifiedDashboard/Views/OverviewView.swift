@@ -62,6 +62,7 @@ struct OverviewView: View {
             .animation(.easeInOut(duration: 0.3), value: overview?.totalPnl)
         }
         .background(Color.portalBg)
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await fetchOnce() }
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
