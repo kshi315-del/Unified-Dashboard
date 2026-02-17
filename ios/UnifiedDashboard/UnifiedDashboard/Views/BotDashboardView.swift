@@ -67,18 +67,18 @@ struct BotDashboardView: View {
                             .padding(.vertical, 9)
                             .background(
                                 isSelected
-                                    ? Fmt.hexColor(bot.color).opacity(0.12)
-                                    : Color.clear
+                                    ? Fmt.hexColor(bot.color).opacity(0.15)
+                                    : Color.cardBg
                             )
-                            .foregroundStyle(isSelected ? .textPrimary : .textDim)
+                            .foregroundStyle(isSelected ? .white : .textDim)
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule()
                                     .stroke(
                                         isSelected
-                                            ? Fmt.hexColor(bot.color).opacity(0.3)
+                                            ? Fmt.hexColor(bot.color).opacity(0.5)
                                             : Color.cardBorder,
-                                        lineWidth: 1
+                                        lineWidth: isSelected ? 1.5 : 1
                                     )
                             )
                         }
@@ -89,6 +89,22 @@ struct BotDashboardView: View {
             }
             .overlay(alignment: .bottom) {
                 Color.cardBorder.frame(height: 1)
+            }
+
+            // Bot stats strip
+            if let bot = bots.first(where: { $0.id == selectedBot }) {
+                HStack(spacing: 0) {
+                    StatPill(label: "BOT", value: bot.short, color: Fmt.hexColor(bot.color))
+                    StatPill(label: "STATUS", value: "Active", color: .portalGreen)
+                    StatPill(label: "UPTIME", value: "99.8%", color: .textPrimary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.cardBg)
+                .overlay(alignment: .bottom) {
+                    Color.cardBorder.frame(height: 1)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             // Loading bar
