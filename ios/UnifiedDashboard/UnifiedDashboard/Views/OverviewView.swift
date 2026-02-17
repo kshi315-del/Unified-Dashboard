@@ -6,77 +6,84 @@ struct OverviewView: View {
     @State private var error: String?
     @State private var lastUpdated: Date?
     @State private var refreshTask: Task<Void, Never>?
+    @State private var isLoading = true
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Total P&L header
-                    totalPnlCard
+                VStack(spacing: 14) {
+                    if isLoading && overview == nil {
+                        LoadingCard()
+                    } else if let overview {
+                        // Hero P&L
+                        GlowNumber(
+                            label: "TOTAL P&L",
+                            value: Fmt.pnl(overview.totalPnl),
+                            color: Fmt.pnlColor(overview.totalPnl),
+                            subtitle: lastUpdated.map { "Updated \(Fmt.relativeTime($0))" }
+                        )
 
-                    // Bot cards
-                    if let overview {
+                        // Bot count summary
+                        let healthy = overview.bots.values.filter { $0.healthy && $0.error == nil }.count
+                        let total = overview.bots.count
+                        HStack(spacing: 16) {
+                            HStack(spacing: 5) {
+                                Circle().fill(.portalGreen).frame(width: 6, height: 6)
+                                Text("\(healthy) healthy")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(.textDim)
+                            }
+                            if healthy < total {
+                                HStack(spacing: 5) {
+                                    Circle().fill(.portalRed).frame(width: 6, height: 6)
+                                    Text("\(total - healthy) issues")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.textDim)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 4)
+
+                        // Bot cards
                         let sortedBots = overview.bots.sorted(by: { $0.key < $1.key })
                         ForEach(sortedBots, id: \.key) { botId, bot in
                             var mutBot = bot
                             mutBot.id = botId
                             BotCardView(botId: botId, bot: mutBot)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
 
                     if let error {
-                        errorBanner(error)
+                        HStack(spacing: 8) {
+                            Image(systemName: "wifi.exclamationmark")
+                                .foregroundStyle(.portalRed)
+                            Text(error)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.portalRed)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(.portalRed.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(.portalRed.opacity(0.2), lineWidth: 1)
+                        )
                     }
                 }
                 .padding()
+                .animation(.easeInOut(duration: 0.3), value: overview?.totalPnl)
             }
-            .background(Color(red: 0.04, green: 0.055, blue: 0.08))
-            .navigationTitle("Portfolio Overview")
+            .background(Color.portalBg)
+            .navigationTitle("Portfolio")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .refreshable { await fetchOnce() }
         }
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
-    }
-
-    // MARK: - Subviews
-
-    private var totalPnlCard: some View {
-        VStack(spacing: 4) {
-            Text("TOTAL P&L")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(Fmt.pnl(overview?.totalPnl ?? 0))
-                .font(.system(.largeTitle, design: .monospaced, weight: .bold))
-                .foregroundStyle(Fmt.pnlColor(overview?.totalPnl ?? 0))
-            if let lastUpdated {
-                Text("Updated \(lastUpdated, style: .time)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(red: 0.067, green: 0.094, blue: 0.125))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    }
-
-    private func errorBanner(_ msg: String) -> some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-            Text(msg)
-                .font(.caption)
-                .foregroundStyle(.red)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.red.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Polling
@@ -99,7 +106,6 @@ struct OverviewView: View {
         let client = APIClient(settings: settings)
         do {
             var response = try await client.fetchOverview()
-            // Inject bot IDs into the structs
             var updatedBots: [String: BotStatus] = [:]
             for (key, var bot) in response.bots {
                 bot.id = key
@@ -107,13 +113,17 @@ struct OverviewView: View {
             }
             response = OverviewResponse(bots: updatedBots, totalPnl: response.totalPnl)
             await MainActor.run {
-                self.overview = response
-                self.lastUpdated = Date()
-                self.error = nil
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.overview = response
+                    self.lastUpdated = Date()
+                    self.error = nil
+                    self.isLoading = false
+                }
             }
         } catch {
             await MainActor.run {
                 self.error = error.localizedDescription
+                self.isLoading = false
             }
         }
     }

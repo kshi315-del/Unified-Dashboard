@@ -10,86 +10,279 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    if isInitialSetup {
-                        VStack(spacing: 8) {
-                            Image(systemName: "server.rack")
-                                .font(.largeTitle)
-                                .foregroundStyle(.blue)
-                            Text("Connect to your Portal")
-                                .font(.headline)
-                            Text("Enter the URL of your Unified Dashboard server to get started.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical)
+            if isInitialSetup {
+                onboardingLayout
+            } else {
+                settingsForm
+            }
+        }
+    }
+
+    // MARK: - Onboarding (initial setup)
+
+    private var onboardingLayout: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 20)
+
+                // Hero
+                VStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [.portalBlue.opacity(0.2), .clear],
+                                    center: .center,
+                                    startRadius: 20,
+                                    endRadius: 60
+                                )
+                            )
+                            .frame(width: 100, height: 100)
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 36, weight: .medium))
+                            .foregroundStyle(.portalBlue)
                     }
+
+                    Text("Connect to Portal")
+                        .font(.system(.title2, design: .monospaced, weight: .bold))
+                        .foregroundStyle(.textPrimary)
+
+                    Text("Enter your Unified Dashboard server URL\nto start monitoring your trading bots.")
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(.textDim)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
                 }
 
-                Section("Server") {
-                    TextField("Server URL (e.g. http://192.168.1.100:8080)", text: $settings.serverURL)
+                // Server URL field
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "SERVER URL", icon: "link")
+
+                    TextField("http://192.168.1.100:8080", text: $settings.serverURL)
+                        .font(.system(.body, design: .monospaced))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
                 }
 
-                Section("Authentication (optional)") {
-                    TextField("Username", text: $settings.username)
+                // Auth fields
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "AUTHENTICATION", icon: "lock")
+                    Text("Optional — only if your portal uses Basic Auth")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.textDim.opacity(0.6))
+
+                    HStack(spacing: 10) {
+                        TextField("Username", text: $settings.username)
+                            .font(.system(.body, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(14)
+                            .background(Color.elevatedBg)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.cardBorder, lineWidth: 1)
+                            )
+
+                        SecureField("Password", text: $settings.password)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(14)
+                            .background(Color.elevatedBg)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.cardBorder, lineWidth: 1)
+                            )
+                    }
+                }
+
+                // Test button
+                Button {
+                    Haptic.tap()
+                    Task { await testConnection() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isTesting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "bolt.fill")
+                        }
+                        Text(isTesting ? "Connecting..." : "Test Connection")
+                            .font(.system(.body, design: .monospaced, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(
+                        LinearGradient(
+                            colors: [.portalBlue, .portalBlue.opacity(0.8)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!settings.isConfigured || isTesting)
+                .opacity(settings.isConfigured ? 1 : 0.4)
+
+                if let result = testResult {
+                    HStack(spacing: 8) {
+                        Image(systemName: testSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        Text(result)
+                            .font(.system(size: 12, design: .monospaced))
+                    }
+                    .foregroundStyle(testSuccess ? .portalGreen : .portalRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background((testSuccess ? Color.portalGreen : .portalRed).opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
+                Spacer()
+            }
+            .padding(24)
+        }
+        .background(Color.portalBg)
+        .navigationTitle("Setup")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    // MARK: - Settings form (non-setup)
+
+    private var settingsForm: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                // Server
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "SERVER", icon: "server.rack")
+
+                    TextField("http://192.168.1.100:8080", text: $settings.serverURL)
+                        .font(.system(.body, design: .monospaced))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Password", text: $settings.password)
+                        .keyboardType(.URL)
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
                 }
+                .cardStyle()
 
-                Section {
+                // Auth
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "AUTHENTICATION", icon: "lock")
+
+                    TextField("Username", text: $settings.username)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
+
+                    SecureField("Password", text: $settings.password)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
+                }
+                .cardStyle()
+
+                // Test connection
+                VStack(spacing: 12) {
                     Button {
+                        Haptic.tap()
                         Task { await testConnection() }
                     } label: {
-                        HStack {
+                        HStack(spacing: 8) {
                             if isTesting {
-                                ProgressView()
-                                    .padding(.trailing, 4)
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "bolt.fill")
                             }
                             Text(isTesting ? "Testing..." : "Test Connection")
+                                .font(.system(.subheadline, design: .monospaced, weight: .bold))
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(.portalBlue)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .disabled(!settings.isConfigured || isTesting)
 
                     if let result = testResult {
-                        HStack {
+                        HStack(spacing: 6) {
                             Image(systemName: testSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(testSuccess ? .green : .red)
+                                .font(.system(size: 12))
                             Text(result)
-                                .font(.caption)
-                                .foregroundStyle(testSuccess ? .green : .red)
+                                .font(.system(size: 12, design: .monospaced))
                         }
+                        .foregroundStyle(testSuccess ? .portalGreen : .portalRed)
                     }
                 }
+                .cardStyle()
 
-                if !isInitialSetup {
-                    Section("About") {
-                        HStack {
-                            Text("App")
-                            Spacer()
-                            Text("Unified Dashboard iOS")
-                                .foregroundStyle(.secondary)
-                        }
-                        HStack {
-                            Text("Server URL")
-                            Spacer()
-                            Text(settings.serverURL.isEmpty ? "Not set" : settings.serverURL)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                // About
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionHeader(title: "ABOUT", icon: "info.circle")
+
+                    HStack {
+                        Text("App")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.textDim)
+                        Spacer()
+                        Text("Unified Dashboard")
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.textPrimary)
+                    }
+                    Divider().overlay(Color.cardBorder)
+                    HStack {
+                        Text("Status")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.textDim)
+                        Spacer()
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(settings.isConfigured ? .portalGreen : .portalRed)
+                                .frame(width: 6, height: 6)
+                            Text(settings.isConfigured ? "Configured" : "Not Set")
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(settings.isConfigured ? .portalGreen : .portalRed)
                         }
                     }
                 }
+                .cardStyle()
             }
-            .navigationTitle(isInitialSetup ? "Setup" : "Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding()
         }
+        .background(Color.portalBg)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
+
+    // MARK: - Test
 
     private func testConnection() async {
         isTesting = true
@@ -102,12 +295,14 @@ struct SettingsView: View {
                 testResult = "Connected — \(botCount) bot\(botCount == 1 ? "" : "s") found"
                 testSuccess = true
                 isTesting = false
+                Haptic.success()
             }
         } catch {
             await MainActor.run {
                 testResult = error.localizedDescription
                 testSuccess = false
                 isTesting = false
+                Haptic.error()
             }
         }
     }

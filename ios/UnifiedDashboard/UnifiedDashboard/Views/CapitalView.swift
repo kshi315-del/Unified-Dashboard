@@ -7,6 +7,7 @@ struct CapitalView: View {
     @State private var error: String?
     @State private var lastUpdated: Date?
     @State private var refreshTask: Task<Void, Never>?
+    @State private var isLoading = true
 
     // Allocate form
     @State private var allocBotId = ""
@@ -28,18 +29,37 @@ struct CapitalView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    balanceHeader
-                    accountCards
-                    actionButtons
-                    allocationsSection
-                    transferHistorySection
+                VStack(spacing: 14) {
+                    if isLoading && capital == nil {
+                        LoadingCard()
+                    } else {
+                        balanceHeader
+                        accountCards
+                        actionButtons
+                        transferHistorySection
+                    }
+
+                    if let error {
+                        HStack(spacing: 8) {
+                            Image(systemName: "wifi.exclamationmark")
+                                .foregroundStyle(.portalRed)
+                            Text(error)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.portalRed)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(.portalRed.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 .padding()
+                .animation(.easeInOut(duration: 0.3), value: capital?.totalAllocated)
             }
-            .background(Color(red: 0.04, green: 0.055, blue: 0.08))
-            .navigationTitle("Capital Management")
+            .background(Color.portalBg)
+            .navigationTitle("Capital")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .refreshable { await fetchAll() }
             .sheet(isPresented: $showAllocateSheet) { allocateSheet }
             .sheet(isPresented: $showTransferSheet) { transferSheet }
@@ -51,170 +71,137 @@ struct CapitalView: View {
     // MARK: - Balance header
 
     private var balanceHeader: some View {
-        VStack(spacing: 4) {
-            Text("ACCOUNT BALANCE")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Group {
             if let balance = capital?.realBalance {
-                Text(Fmt.dollars(balance))
-                    .font(.system(.largeTitle, design: .monospaced, weight: .bold))
-                    .foregroundStyle(Fmt.pnlColorCents(balance))
+                GlowNumber(
+                    label: "KALSHI BALANCE",
+                    value: Fmt.dollars(balance),
+                    color: .portalBlue,
+                    subtitle: capital?.unallocated.map { "Unallocated: \(Fmt.dollars($0))" }
+                )
             } else {
-                Text(Fmt.dollars(capital?.totalAllocated ?? 0) + " allocated")
-                    .font(.system(.title2, design: .monospaced, weight: .bold))
-            }
-            if let unalloc = capital?.unallocated {
-                Text("Unallocated: \(Fmt.dollars(unalloc))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let lastUpdated {
-                Text("Updated \(lastUpdated, style: .time)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                GlowNumber(
+                    label: "TOTAL ALLOCATED",
+                    value: Fmt.dollars(capital?.totalAllocated ?? 0),
+                    color: .textPrimary,
+                    subtitle: "\(capital?.accounts.count ?? 0) bot\((capital?.accounts.count ?? 0) == 1 ? "" : "s")"
+                )
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(red: 0.067, green: 0.094, blue: 0.125))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Account cards
 
     private var accountCards: some View {
         ForEach(capital?.accounts ?? []) { account in
-            CapitalCardView(account: account)
+            CapitalCardView(account: account) {
+                Task { await removeAllocation(account.id) }
+            }
         }
     }
 
     // MARK: - Action buttons
 
     private var actionButtons: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
+                Haptic.tap()
                 showAllocateSheet = true
             } label: {
-                Label("Allocate", systemImage: "plus.circle.fill")
-                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(.green)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 14))
+                    Text("Allocate")
+                        .font(.system(.subheadline, design: .monospaced, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    LinearGradient(
+                        colors: [.portalGreen, .portalGreen.opacity(0.8)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
             Button {
+                Haptic.tap()
                 showTransferSheet = true
             } label: {
-                Label("Transfer", systemImage: "arrow.left.arrow.right")
-                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-
-    // MARK: - Allocations table
-
-    private var allocationsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("ALLOCATIONS")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-
-            if let accounts = capital?.accounts, !accounts.isEmpty {
-                ForEach(accounts) { a in
-                    HStack {
-                        Circle()
-                            .fill(Fmt.hexColor(a.color))
-                            .frame(width: 8, height: 8)
-                        Text(a.label)
-                            .font(.system(.caption, design: .monospaced, weight: .semibold))
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(Fmt.dollars(a.allocation))
-                                .font(.system(.caption, design: .monospaced))
-                            Text(Fmt.signedDollars(a.pnl))
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Fmt.pnlColorCents(a.pnl))
-                        }
-                        Button(role: .destructive) {
-                            Task { await removeAllocation(a.id) }
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                    }
-                    .padding(.vertical, 4)
-                    Divider().overlay(Color.white.opacity(0.05))
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.left.arrow.right.circle.fill")
+                        .font(.system(size: 14))
+                    Text("Transfer")
+                        .font(.system(.subheadline, design: .monospaced, weight: .bold))
                 }
-            } else {
-                Text("No allocations yet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    LinearGradient(
+                        colors: [.portalBlue, .portalBlue.opacity(0.8)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
         }
-        .padding()
-        .background(Color(red: 0.067, green: 0.094, blue: 0.125))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Transfer history
 
     private var transferHistorySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("TRANSFER HISTORY")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "RECENT TRANSFERS", icon: "clock.arrow.circlepath")
 
             if transfers.isEmpty {
-                Text("No transfers yet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                EmptyState(
+                    icon: "arrow.left.arrow.right",
+                    title: "No transfers yet",
+                    message: "Transfers between accounts will appear here"
+                )
             } else {
                 ForEach(transfers) { t in
-                    HStack {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.portalBlue.opacity(0.6))
+                            .frame(width: 20)
+
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(displayName(t.from)) -> \(displayName(t.to))")
-                                .font(.system(.caption, design: .monospaced, weight: .semibold))
+                            HStack(spacing: 4) {
+                                Text(displayName(t.from))
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.textPrimary)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(.textDim)
+                                Text(displayName(t.to))
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.textPrimary)
+                            }
                             Text(Fmt.timestamp(t.ts))
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.textDim)
                         }
+
                         Spacer()
+
                         Text(Fmt.dollars(t.amount))
-                            .font(.system(.caption, design: .monospaced, weight: .semibold))
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.textPrimary)
                     }
-                    .padding(.vertical, 4)
-                    Divider().overlay(Color.white.opacity(0.05))
+                    .padding(.vertical, 6)
+
+                    if t.id != transfers.last?.id {
+                        Divider().overlay(Color.cardBorder)
+                    }
                 }
             }
         }
-        .padding()
-        .background(Color(red: 0.067, green: 0.094, blue: 0.125))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .cardStyle()
     }
 
     // MARK: - Allocate sheet
@@ -229,19 +216,27 @@ struct CapitalView: View {
                     TextField("Label (e.g. BTC Range)", text: $allocLabel)
                 }
                 Section("Amount") {
-                    TextField("Amount in dollars", text: $allocAmount)
-                        .keyboardType(.decimalPad)
+                    HStack {
+                        Text("$")
+                            .foregroundStyle(.secondary)
+                        TextField("0.00", text: $allocAmount)
+                            .keyboardType(.decimalPad)
+                    }
                 }
                 if !allocFeedback.isEmpty {
                     Section {
-                        Text(allocFeedback)
+                        Label(allocFeedback, systemImage: allocIsError ? "xmark.circle" : "checkmark.circle")
                             .foregroundStyle(allocIsError ? .red : .green)
                             .font(.caption)
                     }
                 }
                 Section {
-                    Button("Allocate") {
+                    Button {
                         Task { await doAllocate() }
+                    } label: {
+                        Text("Allocate Capital")
+                            .frame(maxWidth: .infinity)
+                            .font(.headline)
                     }
                     .disabled(allocBotId.isEmpty || allocLabel.isEmpty || allocAmount.isEmpty)
                 }
@@ -278,19 +273,27 @@ struct CapitalView: View {
                     }
                 }
                 Section("Amount") {
-                    TextField("Amount in dollars", text: $xferAmount)
-                        .keyboardType(.decimalPad)
+                    HStack {
+                        Text("$")
+                            .foregroundStyle(.secondary)
+                        TextField("0.00", text: $xferAmount)
+                            .keyboardType(.decimalPad)
+                    }
                 }
                 if !xferFeedback.isEmpty {
                     Section {
-                        Text(xferFeedback)
+                        Label(xferFeedback, systemImage: xferIsError ? "xmark.circle" : "checkmark.circle")
                             .foregroundStyle(xferIsError ? .red : .green)
                             .font(.caption)
                     }
                 }
                 Section {
-                    Button("Transfer") {
+                    Button {
                         Task { await doTransfer() }
+                    } label: {
+                        Text("Transfer Funds")
+                            .frame(maxWidth: .infinity)
+                            .font(.headline)
                     }
                     .disabled(xferFrom == xferTo || xferAmount.isEmpty)
                 }
@@ -311,6 +314,7 @@ struct CapitalView: View {
         guard let amount = Double(allocAmount), amount >= 0 else {
             allocFeedback = "Enter a valid amount"
             allocIsError = true
+            Haptic.error()
             return
         }
         let client = APIClient(settings: settings)
@@ -319,10 +323,12 @@ struct CapitalView: View {
             allocFeedback = "Allocated $\(String(format: "%.2f", amount)) to \(allocLabel)"
             allocIsError = false
             allocAmount = ""
+            Haptic.success()
             await fetchAll()
         } catch {
             allocFeedback = error.localizedDescription
             allocIsError = true
+            Haptic.error()
         }
     }
 
@@ -330,6 +336,7 @@ struct CapitalView: View {
         guard let amount = Double(xferAmount), amount > 0 else {
             xferFeedback = "Enter a valid amount"
             xferIsError = true
+            Haptic.error()
             return
         }
         let client = APIClient(settings: settings)
@@ -338,10 +345,12 @@ struct CapitalView: View {
             xferFeedback = "Transfer complete"
             xferIsError = false
             xferAmount = ""
+            Haptic.success()
             await fetchAll()
         } catch {
             xferFeedback = error.localizedDescription
             xferIsError = true
+            Haptic.error()
         }
     }
 
@@ -349,14 +358,17 @@ struct CapitalView: View {
         let client = APIClient(settings: settings)
         do {
             try await client.removeAllocation(botId: botId)
+            Haptic.success()
             await fetchAll()
         } catch {
             self.error = error.localizedDescription
+            Haptic.error()
         }
     }
 
     private func displayName(_ id: String) -> String {
-        id == "unallocated" ? "Unallocated" : id
+        if id == "unallocated" { return "Pool" }
+        return capital?.accounts.first(where: { $0.id == id })?.label ?? id
     }
 
     // MARK: - Polling
@@ -382,14 +394,18 @@ struct CapitalView: View {
             async let xfer = client.fetchTransfers()
             let (capResult, xferResult) = try await (cap, xfer)
             await MainActor.run {
-                self.capital = capResult
-                self.transfers = xferResult.transfers
-                self.lastUpdated = Date()
-                self.error = nil
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.capital = capResult
+                    self.transfers = xferResult.transfers
+                    self.lastUpdated = Date()
+                    self.error = nil
+                    self.isLoading = false
+                }
             }
         } catch {
             await MainActor.run {
                 self.error = error.localizedDescription
+                self.isLoading = false
             }
         }
     }

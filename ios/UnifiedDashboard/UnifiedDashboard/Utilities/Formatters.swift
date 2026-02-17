@@ -22,16 +22,16 @@ enum Fmt {
 
     /// Color for P&L value
     static func pnlColor(_ value: Double) -> Color {
-        if value > 0 { return .green }
-        if value < 0 { return .red }
-        return .secondary
+        if value > 0 { return .portalGreen }
+        if value < 0 { return .portalRed }
+        return .textDim
     }
 
     /// Color for P&L in cents
     static func pnlColorCents(_ cents: Int) -> Color {
-        if cents > 0 { return .green }
-        if cents < 0 { return .red }
-        return .secondary
+        if cents > 0 { return .portalGreen }
+        if cents < 0 { return .portalRed }
+        return .textDim
     }
 
     /// Parse hex color string to SwiftUI Color
@@ -57,7 +57,6 @@ enum Fmt {
             display.timeStyle = .medium
             return display.string(from: date)
         }
-        // Fallback: try without fractional seconds
         formatter.formatOptions = [.withInternetDateTime]
         if let date = formatter.date(from: iso) {
             let display = DateFormatter()
@@ -66,5 +65,16 @@ enum Fmt {
             return display.string(from: date)
         }
         return iso
+    }
+
+    /// Relative time string ("just now", "5s ago", "2m ago")
+    static func relativeTime(_ date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        if seconds < 5 { return "just now" }
+        if seconds < 60 { return "\(seconds)s ago" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        return "\(hours)h ago"
     }
 }

@@ -1,0 +1,202 @@
+import SwiftUI
+
+// MARK: - Color Palette
+
+extension Color {
+    // Backgrounds
+    static let portalBg = Color(red: 0.04, green: 0.055, blue: 0.08)
+    static let cardBg = Color(red: 0.067, green: 0.094, blue: 0.125)
+    static let cardBorder = Color.white.opacity(0.07)
+    static let elevatedBg = Color(red: 0.08, green: 0.11, blue: 0.15)
+
+    // Accents
+    static let portalBlue = Color(red: 0.23, green: 0.51, blue: 0.96)
+    static let portalGreen = Color(red: 0.13, green: 0.77, blue: 0.37)
+    static let portalRed = Color(red: 0.94, green: 0.27, blue: 0.27)
+    static let portalOrange = Color(red: 0.96, green: 0.62, blue: 0.04)
+
+    // Text
+    static let textPrimary = Color(red: 0.89, green: 0.91, blue: 0.94)
+    static let textDim = Color(red: 0.53, green: 0.60, blue: 0.67)
+}
+
+// MARK: - Card Modifier
+
+struct CardStyle: ViewModifier {
+    var accentColor: Color? = nil
+
+    func body(content: Content) -> some View {
+        content
+            .padding()
+            .background(Color.cardBg)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.cardBorder, lineWidth: 1)
+            )
+            .overlay(alignment: .leading) {
+                if let accent = accentColor {
+                    accent
+                        .frame(width: 3)
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: 14, bottomLeadingRadius: 14
+                        ))
+                }
+            }
+    }
+}
+
+extension View {
+    func cardStyle(accent: Color? = nil) -> some View {
+        modifier(CardStyle(accentColor: accent))
+    }
+}
+
+// MARK: - Section Header
+
+struct SectionHeader: View {
+    let title: String
+    var icon: String? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.textDim)
+            }
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(.textDim)
+                .tracking(1)
+        }
+    }
+}
+
+// MARK: - Stat Pill (for inline stats)
+
+struct StatPill: View {
+    let label: String
+    let value: String
+    var color: Color = .textPrimary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.textDim)
+                .tracking(0.5)
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Glow Header (hero number)
+
+struct GlowNumber: View {
+    let label: String
+    let value: String
+    var color: Color = .textPrimary
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(.textDim)
+                .tracking(1.5)
+
+            Text(value)
+                .font(.system(size: 36, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+                .shadow(color: color.opacity(0.4), radius: 12, y: 2)
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.textDim)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.cardBg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            LinearGradient(
+                                colors: [color.opacity(0.3), color.opacity(0.05)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .overlay(alignment: .top) {
+            color.opacity(0.08)
+                .frame(height: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+    }
+}
+
+// MARK: - Loading Placeholder
+
+struct LoadingCard: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .tint(.textDim)
+            Text("Loading...")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.textDim)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .cardStyle()
+    }
+}
+
+// MARK: - Empty State
+
+struct EmptyState: View {
+    let icon: String
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 28))
+                .foregroundStyle(.textDim.opacity(0.5))
+            Text(title)
+                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
+                .foregroundStyle(.textDim)
+            Text(message)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.textDim.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+    }
+}
+
+// MARK: - Haptics
+
+enum Haptic {
+    static func success() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    static func error() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+    static func tap() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}

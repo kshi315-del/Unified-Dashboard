@@ -4,7 +4,6 @@ import WebKit
 struct BotDashboardView: View {
     @EnvironmentObject var settings: ServerSettings
 
-    // Known bots — matches config.py
     private let bots: [(id: String, name: String, short: String, color: String)] = [
         ("weather", "Weather Bot", "WX", "#4CAF50"),
         ("btc-range", "BTC Range Arb", "BTC", "#f7931a"),
@@ -12,60 +11,108 @@ struct BotDashboardView: View {
     ]
 
     @State private var selectedBot: String = "weather"
+    @State private var isWebViewLoading = true
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Bot selector
+                // Bot selector bar
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         ForEach(bots, id: \.id) { bot in
+                            let isSelected = selectedBot == bot.id
                             Button {
-                                selectedBot = bot.id
+                                Haptic.tap()
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedBot = bot.id
+                                    isWebViewLoading = true
+                                }
                             } label: {
-                                HStack(spacing: 6) {
+                                HStack(spacing: 7) {
                                     Circle()
                                         .fill(Fmt.hexColor(bot.color))
-                                        .frame(width: 8, height: 8)
-                                    Text(bot.short)
-                                        .font(.system(.caption, design: .monospaced, weight: .semibold))
+                                        .frame(width: 7, height: 7)
+                                    Text(bot.name)
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .lineLimit(1)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(selectedBot == bot.id ? Color.blue.opacity(0.15) : Color.clear)
-                                .foregroundStyle(selectedBot == bot.id ? .blue : .secondary)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(
+                                    isSelected
+                                        ? Fmt.hexColor(bot.color).opacity(0.12)
+                                        : Color.clear
+                                )
+                                .foregroundStyle(isSelected ? .textPrimary : .textDim)
+                                .clipShape(Capsule())
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
+                                    Capsule()
                                         .stroke(
-                                            selectedBot == bot.id ? Color.blue.opacity(0.3) : Color.clear,
+                                            isSelected
+                                                ? Fmt.hexColor(bot.color).opacity(0.3)
+                                                : Color.cardBorder,
                                             lineWidth: 1
                                         )
                                 )
                             }
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-                .background(Color(red: 0.067, green: 0.094, blue: 0.125))
+                .background(Color.elevatedBg)
+                .overlay(alignment: .bottom) {
+                    Color.cardBorder.frame(height: 1)
+                }
 
-                // WebView for selected bot
+                // Loading bar
+                if isWebViewLoading {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(.portalBlue)
+                }
+
+                // WebView
                 if let base = settings.baseURL {
                     let dashURL = base.appendingPathComponent("/bot/\(selectedBot)/")
-                    BotWebView(url: dashURL, authHeader: settings.basicAuthHeader)
-                        .id(selectedBot) // Force reload on bot change
-                } else {
-                    ContentUnavailableView(
-                        "Server Not Configured",
-                        systemImage: "server.rack",
-                        description: Text("Set your server URL in Settings")
+                    BotWebView(
+                        url: dashURL,
+                        authHeader: settings.basicAuthHeader,
+                        onFinishLoading: {
+                            withAnimation { isWebViewLoading = false }
+                        }
                     )
+                    .id(selectedBot)
+                } else {
+                    Spacer()
+                    EmptyState(
+                        icon: "server.rack",
+                        title: "Not Connected",
+                        message: "Set your server URL in Settings"
+                    )
+                    Spacer()
                 }
             }
-            .background(Color(red: 0.04, green: 0.055, blue: 0.08))
-            .navigationTitle("Bot Dashboards")
+            .background(Color.portalBg)
+            .navigationTitle("Dashboards")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Haptic.tap()
+                        isWebViewLoading = true
+                        let current = selectedBot
+                        selectedBot = ""
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            selectedBot = current
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+            }
         }
     }
 }
@@ -75,14 +122,20 @@ struct BotDashboardView: View {
 struct BotWebView: UIViewRepresentable {
     let url: URL
     let authHeader: String?
+    var onFinishLoading: (() -> Void)? = nil
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinishLoading: onFinishLoading)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
-        webView.backgroundColor = UIColor(red: 0.04, green: 0.055, blue: 0.08, alpha: 1)
+        webView.backgroundColor = UIColor(Color.portalBg)
         webView.scrollView.backgroundColor = webView.backgroundColor
+        webView.navigationDelegate = context.coordinator
 
         var request = URLRequest(url: url)
         if let auth = authHeader {
@@ -92,7 +145,21 @@ struct BotWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        // Reloads happen via .id() modifier on parent
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        let onFinishLoading: (() -> Void)?
+
+        init(onFinishLoading: (() -> Void)?) {
+            self.onFinishLoading = onFinishLoading
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            onFinishLoading?()
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            onFinishLoading?()
+        }
     }
 }

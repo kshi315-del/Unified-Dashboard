@@ -4,89 +4,98 @@ struct BotCardView: View {
     let botId: String
     let bot: BotStatus
 
+    private var accentColor: Color { Fmt.hexColor(bot.color) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header: name + health badge
-            HStack {
-                Text(bot.name)
-                    .font(.system(.headline, design: .monospaced, weight: .semibold))
+        VStack(alignment: .leading, spacing: 14) {
+            // Header row
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(bot.name)
+                        .font(.system(.subheadline, design: .monospaced, weight: .bold))
+                        .foregroundStyle(.textPrimary)
+                    Text(bot.mode)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(accentColor.opacity(0.8))
+                        .tracking(0.5)
+                }
                 Spacer()
                 healthBadge
             }
 
             if let error = bot.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                HStack(spacing: 6) {
+                    Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                        .font(.system(size: 11))
+                    Text(error)
+                        .font(.system(size: 12, design: .monospaced))
+                }
+                .foregroundStyle(.portalRed.opacity(0.8))
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.portalRed.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
-                // Stats grid
+                // Hero P&L
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(Fmt.pnl(bot.pnl))
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Fmt.pnlColor(bot.pnl))
+                    Text("P&L")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.textDim)
+                }
+
+                // Stats row
+                Divider().overlay(Color.cardBorder)
+
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
+                    GridItem(.flexible()),
                     GridItem(.flexible())
-                ], spacing: 10) {
-                    statItem(label: "P&L", value: Fmt.pnl(bot.pnl), color: Fmt.pnlColor(bot.pnl))
-                    statItem(label: "MODE", value: bot.mode)
-
+                ], spacing: 8) {
                     if let wr = bot.winRate {
-                        statItem(label: "WIN RATE", value: "\(String(format: "%.1f", wr))%")
+                        StatPill(label: "WIN RATE", value: "\(String(format: "%.1f", wr))%",
+                                 color: wr >= 50 ? .portalGreen : .portalOrange)
                     }
                     if let trades = bot.completed {
-                        let winsStr = bot.wins.map { " (\($0)W)" } ?? ""
-                        statItem(label: "TRADES", value: "\(trades)\(winsStr)")
+                        let winsStr = bot.wins.map { "/\($0)W" } ?? ""
+                        StatPill(label: "TRADES", value: "\(trades)\(winsStr)")
                     }
                     if let open = bot.openPositions {
-                        statItem(label: "OPEN", value: "\(open)")
+                        StatPill(label: "OPEN POS", value: "\(open)")
                     }
                     if let daily = bot.dailyTrades {
-                        statItem(label: "DAILY TRADES", value: "\(daily)")
+                        StatPill(label: "TODAY", value: "\(daily)")
                     }
                     if let running = bot.running {
-                        statItem(label: "RUNNING", value: running ? "Yes" : "No",
-                                 color: running ? .green : .red)
+                        StatPill(label: "ENGINE", value: running ? "Running" : "Stopped",
+                                 color: running ? .portalGreen : .portalRed)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(red: 0.067, green: 0.094, blue: 0.125))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .overlay(alignment: .leading) {
-            Fmt.hexColor(bot.color)
-                .frame(width: 3)
-                .clipShape(UnevenRoundedRectangle(
-                    topLeadingRadius: 12, bottomLeadingRadius: 12
-                ))
-        }
+        .cardStyle(accent: accentColor)
     }
 
     private var healthBadge: some View {
         let isError = bot.error != nil
-        let label = isError ? "UNREACHABLE" : (bot.healthy ? "HEALTHY" : "UNHEALTHY")
-        let bg: Color = isError ? .gray.opacity(0.2) : (bot.healthy ? .green.opacity(0.15) : .red.opacity(0.15))
-        let fg: Color = isError ? .secondary : (bot.healthy ? .green : .red)
+        let label = isError ? "OFFLINE" : (bot.healthy ? "HEALTHY" : "ISSUE")
+        let dotColor: Color = isError ? .textDim : (bot.healthy ? .portalGreen : .portalRed)
+        let bgColor: Color = isError ? .textDim.opacity(0.1) : (bot.healthy ? .portalGreen.opacity(0.1) : .portalRed.opacity(0.1))
 
-        return Text(label)
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(bg)
-            .foregroundStyle(fg)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-
-    private func statItem(label: String, value: String, color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 6, height: 6)
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(.body, design: .monospaced, weight: .semibold))
-                .foregroundStyle(color)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(dotColor)
+                .tracking(0.3)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(bgColor)
+        .clipShape(Capsule())
     }
 }
