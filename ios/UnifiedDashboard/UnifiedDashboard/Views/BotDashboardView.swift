@@ -158,6 +158,7 @@ struct BotDashboardView: View {
                         BotWebView(
                             url: dashURL,
                             authHeader: settings.basicAuthHeader,
+                            serverHost: base.host,
                             onFinishLoading: {
                                 withAnimation { isWebViewLoading = false }
                             },
@@ -230,11 +231,17 @@ struct BotDashboardView: View {
 struct BotWebView: UIViewRepresentable {
     let url: URL
     let authHeader: String?
+    let serverHost: String?
     var onFinishLoading: (() -> Void)? = nil
     var onError: ((String) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onFinishLoading: onFinishLoading, onError: onError)
+        Coordinator(
+            authHeader: authHeader,
+            serverHost: serverHost,
+            onFinishLoading: onFinishLoading,
+            onError: onError
+        )
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -249,6 +256,50 @@ struct BotWebView: UIViewRepresentable {
         """
         let script = WKUserScript(source: darkCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         config.userContentController.addUserScript(script)
+
+        // Inject fetch/XHR interceptor to add auth header to all API requests
+        if let auth = authHeader {
+            let escapedAuth = auth.replacingOccurrences(of: "'", with: "\\'")
+            let authInterceptor = """
+            (function() {
+                var authValue = '\(escapedAuth)';
+
+                // Override fetch to inject Authorization header
+                var originalFetch = window.fetch;
+                window.fetch = function(input, init) {
+                    init = init || {};
+                    init.headers = init.headers || {};
+                    if (init.headers instanceof Headers) {
+                        if (!init.headers.has('Authorization')) {
+                            init.headers.set('Authorization', authValue);
+                        }
+                    } else {
+                        if (!init.headers['Authorization']) {
+                            init.headers['Authorization'] = authValue;
+                        }
+                    }
+                    return originalFetch.call(this, input, init);
+                };
+
+                // Override XMLHttpRequest to inject Authorization header
+                var originalOpen = XMLHttpRequest.prototype.open;
+                var originalSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.open = function() {
+                    this._authInjected = false;
+                    return originalOpen.apply(this, arguments);
+                };
+                XMLHttpRequest.prototype.send = function() {
+                    if (!this._authInjected) {
+                        try { this.setRequestHeader('Authorization', authValue); } catch(e) {}
+                        this._authInjected = true;
+                    }
+                    return originalSend.apply(this, arguments);
+                };
+            })();
+            """
+            let authScript = WKUserScript(source: authInterceptor, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+            config.userContentController.addUserScript(authScript)
+        }
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -267,10 +318,15 @@ struct BotWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     class Coordinator: NSObject, WKNavigationDelegate {
+        let authHeader: String?
+        let serverHost: String?
         let onFinishLoading: (() -> Void)?
         let onError: ((String) -> Void)?
 
-        init(onFinishLoading: (() -> Void)?, onError: ((String) -> Void)?) {
+        init(authHeader: String?, serverHost: String?,
+             onFinishLoading: (() -> Void)?, onError: ((String) -> Void)?) {
+            self.authHeader = authHeader
+            self.serverHost = serverHost
             self.onFinishLoading = onFinishLoading
             self.onError = onError
         }
@@ -285,6 +341,31 @@ struct BotWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             onError?(error.localizedDescription)
+        }
+
+        /// Inject auth header on every navigation request to the portal server.
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let auth = authHeader,
+                  let requestURL = navigationAction.request.url,
+                  let host = serverHost,
+                  requestURL.host == host else {
+                decisionHandler(.allow)
+                return
+            }
+
+            // If request already has auth, allow it
+            if navigationAction.request.value(forHTTPHeaderField: "Authorization") != nil {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Cancel and re-issue with auth header
+            decisionHandler(.cancel)
+            var newRequest = navigationAction.request
+            newRequest.setValue(auth, forHTTPHeaderField: "Authorization")
+            webView.load(newRequest)
         }
     }
 }

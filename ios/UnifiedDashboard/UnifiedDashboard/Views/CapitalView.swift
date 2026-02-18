@@ -493,11 +493,21 @@ struct CapitalView: View {
     // MARK: - Actions
 
     private func doAllocate() async {
-        guard let amount = Double(allocAmount), amount >= 0 else {
-            allocFeedback = "Enter a valid amount"
+        guard let amount = Double(allocAmount), amount > 0 else {
+            allocFeedback = "Enter an amount greater than $0"
             allocIsError = true
             Haptic.error()
             return
+        }
+        // Check against available balance
+        if let unallocated = capital?.unallocated {
+            let unallocatedDollars = Double(unallocated) / 100.0
+            if amount > unallocatedDollars {
+                allocFeedback = "Amount exceeds unallocated balance (\(Fmt.dollars(unallocated)))"
+                allocIsError = true
+                Haptic.error()
+                return
+            }
         }
         isAllocating = true
         let client = APIClient(settings: settings)
@@ -506,10 +516,11 @@ struct CapitalView: View {
             allocFeedback = "Allocated $\(String(format: "%.2f", amount)) to \(allocLabel)"
             allocIsError = false
             allocAmount = ""
-            isAllocating = false
             Haptic.success()
+            // Fetch updated data BEFORE closing sheet so UI is current
             await fetchAll()
-            try? await Task.sleep(for: .seconds(1.2))
+            isAllocating = false
+            try? await Task.sleep(for: .seconds(1.0))
             await MainActor.run {
                 showAllocateSheet = false
                 allocFeedback = ""
@@ -526,7 +537,7 @@ struct CapitalView: View {
 
     private func doTransfer() async {
         guard let amount = Double(xferAmount), amount > 0 else {
-            xferFeedback = "Enter a valid amount"
+            xferFeedback = "Enter an amount greater than $0"
             xferIsError = true
             Haptic.error()
             return
@@ -538,10 +549,11 @@ struct CapitalView: View {
             xferFeedback = "Transfer complete"
             xferIsError = false
             xferAmount = ""
-            isTransferring = false
             Haptic.success()
+            // Fetch updated data BEFORE closing sheet so UI is current
             await fetchAll()
-            try? await Task.sleep(for: .seconds(1.2))
+            isTransferring = false
+            try? await Task.sleep(for: .seconds(1.0))
             await MainActor.run {
                 showTransferSheet = false
                 xferFeedback = ""

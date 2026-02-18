@@ -24,8 +24,14 @@ struct UnifiedDashboardApp: App {
             .preferredColorScheme(.dark)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
+            switch phase {
+            case .background:
                 auth.lock()
+            case .active:
+                auth.checkInactivityOnForeground()
+                auth.recordActivity()
+            default:
+                break
             }
         }
     }

@@ -74,7 +74,7 @@ struct OverviewView: View {
         refreshTask = Task {
             while !Task.isCancelled {
                 await fetchOnce()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(8))
             }
         }
     }

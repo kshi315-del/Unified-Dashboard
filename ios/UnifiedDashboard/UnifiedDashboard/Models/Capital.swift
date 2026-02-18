@@ -32,12 +32,19 @@ struct TransfersResponse: Codable {
 }
 
 struct Transfer: Codable, Identifiable {
-    var id: String { "\(from)-\(to)-\(ts)-\(amount)" }
+    /// Unique ID combining all fields + a UUID suffix to prevent collisions
+    /// on same-second, same-amount transfers between the same accounts.
+    let _uuid: String = UUID().uuidString
+    var id: String { "\(from)-\(to)-\(ts)-\(amount)-\(_uuid.prefix(8))" }
 
     let from: String
     let to: String
     let amount: Int   // cents
     let ts: String
+
+    enum CodingKeys: String, CodingKey {
+        case from, to, amount, ts
+    }
 }
 
 // MARK: - Request bodies

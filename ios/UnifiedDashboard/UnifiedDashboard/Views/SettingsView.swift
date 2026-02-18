@@ -73,6 +73,21 @@ struct SettingsView: View {
                         )
                 }
 
+                // HTTP warning
+                if !settings.serverURL.isEmpty && settings.serverURL.lowercased().hasPrefix("http://") {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                        Text("Insecure connection — credentials sent in plaintext over HTTP")
+                            .font(.system(size: 11, design: .monospaced))
+                    }
+                    .foregroundStyle(.portalRed)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.portalRed.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
                 // Auth fields
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeader(title: "AUTHENTICATION", icon: "lock")
@@ -190,6 +205,21 @@ struct SettingsView: View {
                         )
                 }
                 .cardStyle()
+
+                // HTTP warning
+                if !settings.serverURL.isEmpty && settings.serverURL.lowercased().hasPrefix("http://") {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                        Text("Insecure — credentials sent in plaintext over HTTP")
+                            .font(.system(size: 11, design: .monospaced))
+                    }
+                    .foregroundStyle(.portalRed)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.portalRed.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
 
                 // Auth
                 VStack(alignment: .leading, spacing: 8) {

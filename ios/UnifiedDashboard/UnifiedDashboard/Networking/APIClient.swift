@@ -3,6 +3,9 @@ import Foundation
 enum APIError: LocalizedError {
     case notConfigured
     case invalidURL
+    case unauthorized
+    case notFound
+    case serverError(Int)
     case httpError(Int)
     case decodingError(Error)
     case networkError(Error)
@@ -11,10 +14,21 @@ enum APIError: LocalizedError {
         switch self {
         case .notConfigured: return "Server URL not configured"
         case .invalidURL: return "Invalid URL"
+        case .unauthorized: return "Authentication failed (401) — check credentials"
+        case .notFound: return "Not found (404)"
+        case .serverError(let code): return "Server error (HTTP \(code))"
         case .httpError(let code): return "HTTP \(code)"
         case .decodingError(let err): return "Decode error: \(err.localizedDescription)"
         case .networkError(let err): return err.localizedDescription
         }
+    }
+}
+
+struct CapitalLimitResponse: Codable {
+    let allocationCents: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case allocationCents = "allocation_cents"
     }
 }
 
@@ -26,7 +40,7 @@ class APIClient {
     init(settings: ServerSettings) {
         self.settings = settings
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForRequest = 15
         self.session = URLSession(configuration: config)
         self.decoder = JSONDecoder()
     }
@@ -61,6 +75,10 @@ class APIClient {
         let _: [String: Bool] = try await delete("/api/capital/\(botId)")
     }
 
+    func fetchBotCapitalLimit(botId: String) async throws -> CapitalLimitResponse {
+        return try await get("/api/capital/\(botId)/limit")
+    }
+
     // MARK: - HTTP helpers
 
     private func makeRequest(_ path: String, method: String = "GET") throws -> URLRequest {
@@ -75,12 +93,22 @@ class APIClient {
         return req
     }
 
+    private func checkStatus(_ http: HTTPURLResponse) throws {
+        guard !(200...299).contains(http.statusCode) else { return }
+        switch http.statusCode {
+        case 401: throw APIError.unauthorized
+        case 404: throw APIError.notFound
+        case 500...599: throw APIError.serverError(http.statusCode)
+        default: throw APIError.httpError(http.statusCode)
+        }
+    }
+
     private func get<T: Decodable>(_ path: String) async throws -> T {
         let req = try makeRequest(path)
         do {
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse else { throw APIError.invalidURL }
-            guard (200...299).contains(http.statusCode) else { throw APIError.httpError(http.statusCode) }
+            try checkStatus(http)
             do {
                 return try decoder.decode(T.self, from: data)
             } catch {
@@ -100,7 +128,7 @@ class APIClient {
         do {
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse else { throw APIError.invalidURL }
-            guard (200...299).contains(http.statusCode) else { throw APIError.httpError(http.statusCode) }
+            try checkStatus(http)
             return try decoder.decode(T.self, from: data)
         } catch let error as APIError {
             throw error
@@ -114,7 +142,7 @@ class APIClient {
         do {
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse else { throw APIError.invalidURL }
-            guard (200...299).contains(http.statusCode) else { throw APIError.httpError(http.statusCode) }
+            try checkStatus(http)
             return try decoder.decode(T.self, from: data)
         } catch let error as APIError {
             throw error
