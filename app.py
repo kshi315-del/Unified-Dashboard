@@ -43,7 +43,8 @@ def _auth_required(f):
 
 def _bot_base(bot_id: str) -> str:
     """Return the base URL for a bot."""
-    return f"http://{BOT_HOST}:{BOTS[bot_id]['port']}"
+    host = BOTS[bot_id].get("host", BOT_HOST)
+    return f"http://{host}:{BOTS[bot_id]['port']}"
 
 
 def _bot_auth(bot_id: str):
