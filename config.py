@@ -4,17 +4,14 @@ import os
 
 BOT_HOST = os.environ.get("BOT_HOST", "host.docker.internal")
 
+# Categories for grouping bots in the overview and tab bar
+BOT_CATEGORIES = {
+    "crypto":  {"label": "Crypto",  "color": "#f7931a"},
+    "sports":  {"label": "Sports",  "color": "#58a6ff"},
+    "weather": {"label": "Weather", "color": "#4CAF50"},
+}
+
 BOTS = {
-    "weather": {
-        "name": "Weather Bot",
-        "short": "WX",
-        "color": "#4CAF50",
-        "host": "kalshi-weather",
-        "port": 8889,
-        "health_endpoint": "/api/data",
-        "pnl_extractor": "weather",
-        "auth": None,
-    },
     "btc-range": {
         "name": "BTC Range Arb",
         "short": "BTC",
@@ -23,16 +20,32 @@ BOTS = {
         "port": 5050,
         "health_endpoint": "/api/bot/status",
         "pnl_extractor": "btc_range",
+        "category": "crypto",
+        "description": "15-min serial correlation mean reversion (S≥4)",
         "auth": None,
     },
     "btc-momentum": {
-        "name": "BTC Momentum Arb",
+        "name": "BTC Momentum",
         "short": "MOM",
         "color": "#ff6b6b",
         "host": "kalshi-btc-momentum",
         "port": 5051,
         "health_endpoint": "/api/bot/status",
         "pnl_extractor": "btc_range",
+        "category": "crypto",
+        "description": "Extreme momentum continuation (score >0.75)",
+        "auth": None,
+    },
+    "bounce-back": {
+        "name": "Bounce-Back",
+        "short": "BBK",
+        "color": "#06b6d4",
+        "host": "kalshi-bounce-back",
+        "port": 5052,
+        "health_endpoint": "/api/health",
+        "pnl_extractor": "bounce_back",
+        "category": "crypto",
+        "description": "Intra-window contract reversal at minute 10 (>8¢ move)",
         "auth": None,
     },
     "fvg-arb": {
@@ -43,6 +56,8 @@ BOTS = {
         "port": 5052,
         "health_endpoint": "/api/bot/status",
         "pnl_extractor": "btc_range",
+        "category": "crypto",
+        "description": "Fair Value Gap mean reversion",
         "auth": None,
     },
     "sports-arb": {
@@ -55,10 +70,24 @@ BOTS = {
         "status_endpoint": "/api/status",
         "pnl_endpoint": "/api/pnl",
         "pnl_extractor": "sports_arb",
+        "category": "sports",
+        "description": "Real-time odds arbitrage (NBA, Soccer, MLB, NFL, NHL)",
         "auth": {
             "type": "basic",
             "user_env": "SPORTS_DASH_USER",
             "pass_env": "SPORTS_DASH_PASS",
         },
+    },
+    "weather": {
+        "name": "Weather Bot",
+        "short": "WX",
+        "color": "#4CAF50",
+        "host": "kalshi-weather",
+        "port": 8889,
+        "health_endpoint": "/api/data",
+        "pnl_extractor": "weather",
+        "category": "weather",
+        "description": "METAR temperature latency arbitrage",
+        "auth": None,
     },
 }

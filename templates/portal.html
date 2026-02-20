@@ -67,6 +67,10 @@
     gap: 0.5rem;
   }
   .tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .tab-divider {
+    width: 0; height: 18px; border-left: 2px solid #444;
+    margin: 0 4px; align-self: center; border-radius: 1px;
+  }
   .tab.active {
     color: var(--text);
     border-bottom-color: var(--accent);
@@ -113,10 +117,23 @@
   .total-pnl.negative { color: var(--red); }
   .total-pnl.zero { color: var(--text-dim); }
 
+  .bot-category {
+    margin-bottom: 1.5rem;
+  }
+  .bot-category-title {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--text-dim);
+    margin-bottom: 0.75rem; padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .bot-category-dot {
+    width: 6px; height: 6px; border-radius: 50%; display: inline-block;
+  }
   .bot-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.85rem;
   }
   .bot-card {
     background: var(--card);
@@ -127,6 +144,10 @@
     transition: border-color 0.2s;
   }
   .bot-card:hover { border-color: var(--accent); }
+  .bot-card-desc {
+    font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.75rem;
+    margin-top: -0.5rem;
+  }
   .bot-card-header {
     display: flex;
     justify-content: space-between;
@@ -439,8 +460,14 @@
     <button class="tab" data-tab="capital">$ Capital</button>
     <button class="tab" data-tab="rules">&#9881; Rules</button>
     <button class="tab" data-tab="claude" style="color:var(--orange)">&gt;_ Claude</button>
+    {% set ns = namespace(last_cat='') %}
     {% for bot_id, bot in bots.items() %}
-    <button class="tab" data-tab="{{ bot_id }}">
+      {% if bot.category != ns.last_cat %}
+        {% set cat = categories.get(bot.category, {}) %}
+        <span class="tab-divider" style="border-color:{{ cat.color or '#555' }}" title="{{ cat.label or bot.category }}"></span>
+        {% set ns.last_cat = bot.category %}
+      {% endif %}
+    <button class="tab" data-tab="{{ bot_id }}" title="{{ bot.name }} — {{ bot.description or '' }}">
       <span class="dot" id="dot-{{ bot_id }}"></span>
       {{ bot.short }}
     </button>
@@ -459,7 +486,7 @@
           <div class="refresh-info" id="refreshInfo">Loading...</div>
         </div>
       </div>
-      <div class="bot-cards" id="botCards"></div>
+      <div id="botCards"></div>
     </div>
   </div>
 
@@ -627,65 +654,98 @@ function renderOverview(data) {
   document.getElementById('refreshInfo').textContent =
     'Updated ' + new Date().toLocaleTimeString();
 
-  // Bot cards
+  // Bot cards — grouped by category
   const container = document.getElementById('botCards');
   container.innerHTML = '';
 
+  const CATEGORIES = {{ categories | tojson }};
+  const catColors = {};
+  for (const [k,v] of Object.entries(CATEGORIES)) catColors[k] = v.color || '#666';
+
+  // Group bots by category preserving config order
+  const byCategory = {};
+  const catOrder = [];
   for (const [botId, bot] of Object.entries(data.bots)) {
     const cfg = BOTS[botId] || {};
-    const card = document.createElement('div');
-    card.className = 'bot-card';
-    card.style.borderLeftColor = bot.color || cfg.color || '#666';
+    const cat = cfg.category || 'other';
+    if (!byCategory[cat]) { byCategory[cat] = []; catOrder.push(cat); }
+    byCategory[cat].push([botId, bot, cfg]);
+  }
 
-    const isHealthy = bot.healthy;
-    const hasError = !!bot.error;
+  for (const cat of catOrder) {
+    const bots = byCategory[cat];
+    const catInfo = CATEGORIES[cat] || {};
+    const catColor = catInfo.color || '#666';
 
-    let statsHtml = '';
-    if (hasError) {
-      statsHtml = '<div class="error-msg">' + bot.error + '</div>';
-    } else {
-      statsHtml = '<div class="bot-stats">';
-      statsHtml += '<div class="stat-item"><div class="stat-label">P&L</div>' +
-        '<div class="stat-value ' + pnlClass(bot.pnl) + '">' + formatPnl(bot.pnl) + '</div></div>';
-      statsHtml += '<div class="stat-item"><div class="stat-label">Mode</div>' +
-        '<div class="stat-value">' + (bot.mode || 'N/A') + '</div></div>';
+    // Category header
+    const header = document.createElement('div');
+    header.className = 'bot-category';
+    const title = document.createElement('div');
+    title.className = 'bot-category-title';
+    title.innerHTML = `<span class="bot-category-dot" style="background:${catColor}"></span>${catInfo.label || cat.toUpperCase()}`;
+    header.appendChild(title);
 
-      if (bot.win_rate !== undefined) {
-        statsHtml += '<div class="stat-item"><div class="stat-label">Win Rate</div>' +
-          '<div class="stat-value">' + bot.win_rate + '%</div></div>';
+    // Cards grid
+    const grid = document.createElement('div');
+    grid.className = 'bot-cards';
+
+    for (const [botId, bot, cfg] of bots) {
+      const card = document.createElement('div');
+      card.className = 'bot-card';
+      card.style.borderLeftColor = bot.color || cfg.color || '#666';
+
+      const isHealthy = bot.healthy;
+      const hasError = !!bot.error;
+      const modeColor = bot.mode === 'LIVE' ? 'var(--green)' : 'var(--yellow)';
+
+      let statsHtml = '';
+      if (hasError) {
+        statsHtml = '<div class="error-msg">' + bot.error + '</div>';
+      } else {
+        statsHtml = '<div class="bot-stats">';
+        statsHtml += '<div class="stat-item"><div class="stat-label">P&L</div>' +
+          '<div class="stat-value ' + pnlClass(bot.pnl) + '">' + formatPnl(bot.pnl) + '</div></div>';
+        statsHtml += '<div class="stat-item"><div class="stat-label">Mode</div>' +
+          `<div class="stat-value" style="color:${modeColor};font-weight:700">${bot.mode || 'N/A'}</div></div>`;
+        if (bot.win_rate !== undefined) {
+          const wrColor = bot.win_rate >= 60 ? 'var(--green)' : bot.win_rate >= 45 ? '' : 'var(--red)';
+          statsHtml += '<div class="stat-item"><div class="stat-label">Win Rate</div>' +
+            `<div class="stat-value" style="color:${wrColor}">${bot.win_rate}%</div></div>`;
+        }
+        if (bot.completed !== undefined) {
+          statsHtml += '<div class="stat-item"><div class="stat-label">Trades</div>' +
+            '<div class="stat-value">' + bot.completed +
+            (bot.wins !== undefined ? ' (' + bot.wins + 'W)' : '') + '</div></div>';
+        }
+        if (bot.open_positions !== undefined) {
+          statsHtml += '<div class="stat-item"><div class="stat-label">Open</div>' +
+            '<div class="stat-value">' + bot.open_positions + '</div></div>';
+        }
+        if (bot.daily_trades !== undefined) {
+          statsHtml += '<div class="stat-item"><div class="stat-label">Today</div>' +
+            '<div class="stat-value">' + bot.daily_trades + ' trades</div></div>';
+        }
+        statsHtml += '</div>';
       }
-      if (bot.completed !== undefined) {
-        statsHtml += '<div class="stat-item"><div class="stat-label">Trades</div>' +
-          '<div class="stat-value">' + bot.completed +
-          (bot.wins !== undefined ? ' (' + bot.wins + 'W)' : '') + '</div></div>';
-      }
-      if (bot.open_positions !== undefined) {
-        statsHtml += '<div class="stat-item"><div class="stat-label">Open</div>' +
-          '<div class="stat-value">' + bot.open_positions + '</div></div>';
-      }
-      if (bot.daily_trades !== undefined) {
-        statsHtml += '<div class="stat-item"><div class="stat-label">Daily Trades</div>' +
-          '<div class="stat-value">' + bot.daily_trades + '</div></div>';
-      }
-      if (bot.running !== undefined) {
-        statsHtml += '<div class="stat-item"><div class="stat-label">Running</div>' +
-          '<div class="stat-value">' + (bot.running ? 'Yes' : 'No') + '</div></div>';
-      }
-      statsHtml += '</div>';
+
+      const badgeClass = hasError ? 'unknown' : (isHealthy ? 'healthy' : 'unhealthy');
+      const badgeText = hasError ? 'OFFLINE' : (isHealthy ? 'LIVE' : 'DOWN');
+      const desc = cfg.description ? `<div class="bot-card-desc">${cfg.description}</div>` : '';
+
+      card.innerHTML =
+        '<div class="bot-card-header">' +
+          '<span class="bot-card-title">' + bot.name + '</span>' +
+          '<span class="bot-badge ' + badgeClass + '">' + badgeText + '</span>' +
+        '</div>' +
+        desc +
+        statsHtml +
+        '<button class="open-btn" data-bot="' + botId + '">Open Dashboard &rarr;</button>';
+
+      grid.appendChild(card);
     }
 
-    const badgeClass = hasError ? 'unknown' : (isHealthy ? 'healthy' : 'unhealthy');
-    const badgeText = hasError ? 'UNREACHABLE' : (isHealthy ? 'HEALTHY' : 'UNHEALTHY');
-
-    card.innerHTML =
-      '<div class="bot-card-header">' +
-        '<span class="bot-card-title">' + bot.name + '</span>' +
-        '<span class="bot-badge ' + badgeClass + '">' + badgeText + '</span>' +
-      '</div>' +
-      statsHtml +
-      '<button class="open-btn" data-bot="' + botId + '">Open Dashboard &rarr;</button>';
-
-    container.appendChild(card);
+    header.appendChild(grid);
+    container.appendChild(header);
   }
 
   // Update tab dots

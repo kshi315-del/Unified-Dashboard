@@ -203,6 +203,20 @@ def bot_dashboard(bot_id):
 # Overview aggregation
 # ---------------------------------------------------------------------------
 
+def _extract_bounce_back(data):
+    summary = data.get("summary", {})
+    return {
+        "healthy": data.get("running", False),
+        "running": data.get("running", False),
+        "mode": (data.get("mode") or "PAPER").upper(),
+        "pnl": round(summary.get("total_pnl", 0), 3),
+        "completed": summary.get("settled", 0),
+        "wins": summary.get("wins", 0),
+        "win_rate": round(summary.get("win_rate", 0) * 100, 1),
+        "open_positions": summary.get("open", 0),
+    }
+
+
 def _extract_weather(data):
     pt = data.get("paper_trading", {})
     lt = data.get("live_trading", {})
@@ -273,6 +287,8 @@ def overview():
                 entry.update(_extract_weather(data))
             elif extractor == "btc_range":
                 entry.update(_extract_btc_range(data))
+            elif extractor == "bounce_back":
+                entry.update(_extract_bounce_back(data))
             elif extractor == "sports_arb":
                 entry.update(_extract_sports_arb_health(data))
                 # Sports arb health endpoint doesn't have P&L; fetch status
@@ -333,6 +349,8 @@ def _get_bot_pnl():
                 pnl[bot_id] = _extract_weather(data).get("pnl", 0)
             elif extractor == "btc_range":
                 pnl[bot_id] = _extract_btc_range(data).get("pnl", 0)
+            elif extractor == "bounce_back":
+                pnl[bot_id] = _extract_bounce_back(data).get("pnl", 0)
             elif extractor == "sports_arb":
                 try:
                     status_url = _bot_base(bot_id) + cfg.get("status_endpoint", "/api/status")
@@ -581,7 +599,8 @@ def claude_chat():
 @app.route("/")
 @_auth_required
 def index():
-    return render_template("portal.html", bots=BOTS)
+    from config import BOT_CATEGORIES
+    return render_template("portal.html", bots=BOTS, categories=BOT_CATEGORIES)
 
 
 # ---------------------------------------------------------------------------
