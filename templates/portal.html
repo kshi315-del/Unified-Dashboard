@@ -350,6 +350,84 @@
   }
   .claude-input-area textarea:focus { outline: none; border-color: var(--accent); }
   .claude-input-area .btn { flex-shrink: 0; }
+
+  /* Rules panel */
+  .rules { padding: 1.5rem; overflow-y: auto; }
+  .rules-section { margin-bottom: 2.5rem; }
+  .rules-section-title {
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-dim); margin-bottom: 1rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--card-border);
+  }
+  .rules-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;
+  }
+  .rules-card {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 8px; padding: 1.25rem;
+  }
+  .rules-card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1rem;
+  }
+  .rules-card-title { font-size: 0.95rem; font-weight: 600; }
+  .rules-toggle {
+    display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--text-dim);
+  }
+  .toggle-switch {
+    position: relative; width: 32px; height: 18px; cursor: pointer;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: #444; border-radius: 18px;
+    transition: 0.2s;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute; width: 12px; height: 12px;
+    left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--green); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(14px); }
+  .rules-field { margin-bottom: 0.75rem; }
+  .rules-field label {
+    display: block; font-size: 0.65rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px;
+  }
+  .rules-field input, .rules-field select {
+    background: var(--bg); border: 1px solid var(--card-border); color: var(--text);
+    padding: 0.35rem 0.6rem; border-radius: 4px; font-family: inherit;
+    font-size: 0.82rem; width: 100%;
+  }
+  .rules-field input:focus, .rules-field select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .rules-subhead {
+    font-size: 0.65rem; color: var(--accent); text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 0.75rem 0 0.4rem;
+  }
+  .rules-card-footer {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;
+  }
+  .rules-feedback { font-size: 0.75rem; min-height: 1em; }
+  .rules-feedback.ok { color: var(--green); }
+  .rules-feedback.err { color: var(--red); }
+  .btc-field-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.82rem;
+  }
+  .btc-field-row:last-child { border-bottom: none; }
+  .btc-field-label { color: var(--text-dim); font-size: 0.75rem; }
+  .btc-field-val { font-weight: 500; }
+  .tier-badge {
+    display: inline-block; font-size: 0.6rem; padding: 2px 6px; border-radius: 3px;
+    font-weight: 600; margin-right: 3px;
+  }
+  .tier-on { background: rgba(80,200,120,0.15); color: var(--green); }
+  .tier-off { background: rgba(255,100,100,0.1); color: #666; text-decoration: line-through; }
+  .rules-stopped {
+    font-size: 0.75rem; color: var(--red); margin-top: 0.5rem;
+  }
 </style>
 </head>
 <body>
@@ -359,6 +437,7 @@
   <div class="tabs" id="tabBar">
     <button class="tab active" data-tab="overview">Overview</button>
     <button class="tab" data-tab="capital">$ Capital</button>
+    <button class="tab" data-tab="rules">&#9881; Rules</button>
     <button class="tab" data-tab="claude" style="color:var(--orange)">&gt;_ Claude</button>
     {% for bot_id, bot in bots.items() %}
     <button class="tab" data-tab="{{ bot_id }}">
@@ -455,6 +534,13 @@
     </div>
   </div>
 
+  <!-- Rules panel -->
+  <div class="panel" id="panel-rules">
+    <div class="rules" id="rulesContent">
+      <div style="color:var(--text-dim);text-align:center;padding:3rem">Loading rules...</div>
+    </div>
+  </div>
+
   <!-- Claude panel -->
   <div class="panel" id="panel-claude">
     <div class="claude-chat">
@@ -499,9 +585,10 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   document.getElementById('panel-' + target).classList.add('active');
 
   // Lazy-load iframe (skip non-bot tabs)
-  if (target !== 'overview' && target !== 'capital' && !loadedIframes[target]) {
+  if (target !== 'overview' && target !== 'capital' && target !== 'claude' && target !== 'rules' && !loadedIframes[target]) {
     loadIframe(target);
   }
+  if (target === 'rules') loadRules();
 });
 
 function loadIframe(botId) {
@@ -1041,6 +1128,245 @@ document.getElementById('claudeInput').addEventListener('keydown', function(e) {
     sendClaudeMessage();
   }
 });
+
+// ============================================================
+// RULES TAB
+// ============================================================
+const SPORT_LABELS = {nba:'NBA', soccer:'Soccer', mlb:'MLB', nfl:'NFL', nhl:'NHL'};
+const SPORT_COLORS = {nba:'#58a6ff', soccer:'#50c878', mlb:'#f7931a', nfl:'#8b5cf6', nhl:'#06b6d4'};
+let _rulesLoaded = false;
+
+async function loadRules() {
+  if (_rulesLoaded) return;
+  _rulesLoaded = true;
+
+  const el = document.getElementById('rulesContent');
+
+  // Fetch sports config + BTC Range config + BTC Momentum config in parallel
+  const [sportsRes, btcRes, momRes] = await Promise.allSettled([
+    fetch('/proxy/sports-arb/api/config', {headers: {'Authorization': 'Basic ' + btoa('admin:changeme123')}}).then(r => r.ok ? r.json() : null),
+    fetch('/proxy/btc-range/api/bot/config').then(r => r.ok ? r.json() : null),
+    fetch('/proxy/btc-momentum/api/bot/config').then(r => r.ok ? r.json() : null),
+  ]);
+
+  const sportsConfig = sportsRes.status === 'fulfilled' ? sportsRes.value : null;
+  const btcConfig    = btcRes.status === 'fulfilled' ? btcRes.value : null;
+  const momConfig    = momRes.status === 'fulfilled' ? momRes.value : null;
+
+  el.innerHTML = renderRules(sportsConfig, btcConfig, momConfig);
+}
+
+function renderRules(sports, btc, mom) {
+  let html = '';
+
+  // ---- Sports Arb Section ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Sports Arb — Trading Rules</div>';
+  if (!sports) {
+    html += '<div style="color:var(--red);font-size:.85rem">Could not reach sports-arb config endpoint</div>';
+  } else {
+    html += '<div class="rules-grid">';
+    const order = ['nba','soccer','mlb','nfl','nhl'];
+    for (const sport of order) {
+      if (!sports[sport]) continue;
+      html += renderSportCard(sport, sports[sport]);
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // ---- BTC Bots Section ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">BTC 15-Min Arb — Bot Config</div>';
+  html += '<div class="rules-grid">';
+  html += renderBtcCard('BTC Range', '#f7931a', btc, false);
+  html += renderBtcCard('BTC Momentum', '#ff6b6b', mom, true);
+  html += '</div>';
+  html += '</div>';
+
+  return html;
+}
+
+function renderSportCard(sport, cfg) {
+  const color = SPORT_COLORS[sport] || '#fff';
+  const label = SPORT_LABELS[sport] || sport.toUpperCase();
+  const pt = cfg.profit_target || {};
+  const ed = cfg.edge_decay || {};
+
+  return `<div class="rules-card" style="border-top:3px solid ${color}">
+    <div class="rules-card-header">
+      <span class="rules-card-title">${label}</span>
+      <label class="toggle-switch" title="Enabled">
+        <input type="checkbox" ${cfg.enabled !== false ? 'checked' : ''} onchange="saveSportField('${sport}','enabled',this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="rules-subhead">Price &amp; Edge</div>
+    <div class="rules-field">
+      <label>Min Edge (%)</label>
+      <input type="number" step="0.5" min="0" max="50" value="${+(cfg.min_edge*100).toFixed(1)}"
+        onchange="saveSportField('${sport}','min_edge',parseFloat(this.value)/100)">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      <div class="rules-field">
+        <label>Min Price (¢)</label>
+        <input type="number" step="1" min="1" max="99" value="${cfg.min_price||15}"
+          onchange="saveSportField('${sport}','min_price',parseInt(this.value))">
+      </div>
+      <div class="rules-field">
+        <label>Max Price (¢)</label>
+        <input type="number" step="1" min="1" max="99" value="${cfg.max_price||90}"
+          onchange="saveSportField('${sport}','max_price',parseInt(this.value))">
+      </div>
+    </div>
+
+    <div class="rules-subhead">Profit Target</div>
+    <div class="rules-field">
+      <label>Mode</label>
+      <select onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),mode:this.value})">
+        ${['dynamic','fixed','fixed_by_half'].map(m=>`<option value="${m}"${pt.mode===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+    </div>
+    ${pt.mode==='dynamic' ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      <div class="rules-field">
+        <label>Multiplier</label>
+        <input type="number" step="0.05" min="0.1" max="2" value="${pt.multiplier||0.5}"
+          onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),multiplier:parseFloat(this.value)})">
+      </div>
+      <div class="rules-field">
+        <label>Min Profit (¢)</label>
+        <input type="number" step="1" min="1" max="20" value="${pt.min_profit||2}"
+          onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),min_profit:parseInt(this.value)})">
+      </div>
+    </div>` : pt.mode==='fixed_by_half' ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
+      <div class="rules-field">
+        <label>1st Half (¢)</label>
+        <input type="number" step="1" min="1" value="${pt.profit_1h||15}"
+          onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),profit_1h:parseInt(this.value)})">
+      </div>
+      <div class="rules-field">
+        <label>2nd Half (¢)</label>
+        <input type="number" step="1" min="1" value="${pt.profit_2h||25}"
+          onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),profit_2h:parseInt(this.value)})">
+      </div>
+      <div class="rules-field">
+        <label>Tie (¢)</label>
+        <input type="number" step="1" min="1" value="${pt.tie_profit||15}"
+          onchange="saveSportField('${sport}','profit_target',{...getProfitTarget('${sport}'),tie_profit:parseInt(this.value)})">
+      </div>
+    </div>` : ''}
+
+    <div class="rules-subhead">Edge Decay</div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+      <label class="toggle-switch" title="Enable edge decay">
+        <input type="checkbox" ${ed.enabled ? 'checked' : ''}
+          onchange="saveSportField('${sport}','edge_decay',{...getEdgeDecay('${sport}'),enabled:this.checked})">
+        <span class="toggle-slider"></span>
+      </label>
+      <span style="font-size:.75rem;color:var(--text-dim)">Tighten before game start</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      <div class="rules-field">
+        <label>Tighten Hours</label>
+        <input type="number" step="0.5" min="0.5" max="12" value="${ed.tighten_hours||2}"
+          onchange="saveSportField('${sport}','edge_decay',{...getEdgeDecay('${sport}'),tighten_hours:parseFloat(this.value)})">
+      </div>
+      <div class="rules-field">
+        <label>Tighten Factor</label>
+        <input type="number" step="0.05" min="0.1" max="1" value="${ed.tighten_factor||0.7}"
+          onchange="saveSportField('${sport}','edge_decay',{...getEdgeDecay('${sport}'),tighten_factor:parseFloat(this.value)})">
+      </div>
+    </div>
+
+    <div class="rules-card-footer">
+      <span class="rules-feedback" id="fb-${sport}"></span>
+    </div>
+  </div>`;
+}
+
+function renderBtcCard(name, color, cfg, isMomentum) {
+  if (!cfg) {
+    return `<div class="rules-card" style="border-top:3px solid ${color}">
+      <div class="rules-card-header"><span class="rules-card-title">${name}</span></div>
+      <div class="rules-stopped">${isMomentum ? '⏹ STOPPED — no edge at S=1-2 continuation' : 'Unreachable'}</div>
+    </div>`;
+  }
+  const tiers = cfg.enabled_tiers || {};
+  const tierOrder = ['sniper','standard','volume','micro','nano'];
+  const sz = cfg.asset_sizes || {};
+  const ex = cfg.smart_exit_tiers || [];
+
+  return `<div class="rules-card" style="border-top:3px solid ${color}">
+    <div class="rules-card-header">
+      <span class="rules-card-title">${name}</span>
+      <span class="sub-card-badge">${(cfg.mode||'?').toUpperCase()}</span>
+    </div>
+
+    <div class="rules-subhead">Signal Entry</div>
+    <div class="btc-field-row"><span class="btc-field-label">Streak Threshold</span><span class="btc-field-val">≥ ${cfg.streak_threshold ?? '?'} consecutive</span></div>
+    <div class="btc-field-row"><span class="btc-field-label">Base Contracts</span><span class="btc-field-val">${cfg.base_contracts ?? '?'}</span></div>
+    <div class="btc-field-row">
+      <span class="btc-field-label">Asset Sizes</span>
+      <span class="btc-field-val">${Object.entries(sz).map(([a,v])=>`${a.toUpperCase()}×${v}`).join(', ') || '—'}</span>
+    </div>
+    <div class="btc-field-row">
+      <span class="btc-field-label">Tiers</span>
+      <span class="btc-field-val">${tierOrder.map(t=>`<span class="tier-badge ${tiers[t]?'tier-on':'tier-off'}">${t}</span>`).join('')}</span>
+    </div>
+
+    <div class="rules-subhead">Smart Exit</div>
+    <div class="btc-field-row"><span class="btc-field-label">Trailing Take-Profit</span><span class="btc-field-val">${((cfg.smart_exit_trail_pct||0)*100).toFixed(0)}% drawdown from peak (min ${((cfg.smart_exit_min_peak||0)*100).toFixed(0)}¢)</span></div>
+    ${ex.map(t=>`<div class="btc-field-row"><span class="btc-field-label">Profit Tier</span><span class="btc-field-val">Sell ${(t.sell_fraction*100).toFixed(0)}% at ${(t.profit_pct*100).toFixed(0)}% of max profit</span></div>`).join('')}
+    <div class="btc-field-row"><span class="btc-field-label">Time Exit</span><span class="btc-field-val">Sell if profitable with ≤ ${cfg.smart_exit_time_secs ?? '?'}s left</span></div>
+    <div class="btc-field-row"><span class="btc-field-label">Spot Reversal</span><span class="btc-field-val">Sell if spot drops ${((cfg.smart_exit_spot_trail||0)*100).toFixed(2)}% from peak</span></div>
+    ${isMomentum ? '<div class="rules-stopped">⏹ Container stopped</div>' : ''}
+  </div>`;
+}
+
+// Helper: read current profit_target values from DOM inputs for a sport card
+function getProfitTarget(sport) {
+  const card = [...document.querySelectorAll('.rules-card')].find(c => c.innerHTML.includes(`'${sport}'`));
+  if (!card) return {};
+  const sel = card.querySelector('select');
+  const inputs = [...card.querySelectorAll('input[type=number]')];
+  const mode = sel ? sel.value : 'dynamic';
+  if (mode === 'dynamic') return {mode, multiplier: parseFloat(inputs[3]?.value||0.5), min_profit: parseInt(inputs[4]?.value||2)};
+  if (mode === 'fixed_by_half') return {mode, profit_1h: parseInt(inputs[3]?.value||15), profit_2h: parseInt(inputs[4]?.value||25), tie_profit: parseInt(inputs[5]?.value||15)};
+  return {mode};
+}
+
+function getEdgeDecay(sport) {
+  const card = [...document.querySelectorAll('.rules-card')].find(c => c.innerHTML.includes(`getEdgeDecay('${sport}')`));
+  if (!card) return {};
+  const inputs = [...card.querySelectorAll('input[type=number]')];
+  return {enabled: true, tighten_hours: parseFloat(inputs.at(-2)?.value||2), tighten_factor: parseFloat(inputs.at(-1)?.value||0.7)};
+}
+
+async function saveSportField(sport, field, value) {
+  const fb = document.getElementById('fb-' + sport);
+  if (fb) { fb.textContent = 'Saving…'; fb.className = 'rules-feedback'; }
+  try {
+    const res = await fetch('/proxy/sports-arb/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa('admin:changeme123'),
+      },
+      body: JSON.stringify({[sport]: {[field]: value}}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (fb) { fb.textContent = '✓ Saved'; fb.className = 'rules-feedback ok'; setTimeout(()=>{ if(fb) fb.textContent=''; }, 2000); }
+    } else {
+      if (fb) { fb.textContent = 'Error: ' + (data.error||'unknown'); fb.className = 'rules-feedback err'; }
+    }
+  } catch(e) {
+    if (fb) { fb.textContent = 'Network error'; fb.className = 'rules-feedback err'; }
+  }
+}
 </script>
 </body>
 </html>
