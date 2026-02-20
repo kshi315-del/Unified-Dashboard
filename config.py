@@ -42,7 +42,7 @@ BOTS = {
         "color": "#06b6d4",
         "host": "kalshi-bounce-back",
         "port": 5052,
-        "health_endpoint": "/api/health",
+        "health_endpoint": "/api/status",
         "pnl_extractor": "bounce_back",
         "category": "crypto",
         "description": "Intra-window contract reversal at minute 10 (>8¢ move)",
