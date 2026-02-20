@@ -488,6 +488,7 @@
     <button class="tab active" data-tab="overview">Overview</button>
     <button class="tab" data-tab="capital">$ Capital</button>
     <button class="tab" data-tab="rules">&#9881; Rules</button>
+    <button class="tab" data-tab="system">&#128190; System</button>
     <button class="tab" data-tab="claude" style="color:var(--orange)">&gt;_ Claude</button>
     {% set ns = namespace(last_cat='') %}
     {% for bot_id, bot in bots.items() %}
@@ -615,6 +616,13 @@
     </div>
   </div>
 
+  <!-- System panel -->
+  <div class="panel" id="panel-system">
+    <div class="rules" id="systemContent">
+      <div style="color:var(--text-dim);text-align:center;padding:3rem">Loading system info...</div>
+    </div>
+  </div>
+
   <!-- Bot iframe panels -->
   {% for bot_id, bot in bots.items() %}
   <div class="panel" id="panel-{{ bot_id }}">
@@ -641,10 +649,11 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   document.getElementById('panel-' + target).classList.add('active');
 
   // Lazy-load iframe (skip non-bot tabs)
-  if (target !== 'overview' && target !== 'capital' && target !== 'claude' && target !== 'rules' && !loadedIframes[target]) {
+  if (target !== 'overview' && target !== 'capital' && target !== 'claude' && target !== 'rules' && target !== 'system' && !loadedIframes[target]) {
     loadIframe(target);
   }
   if (target === 'rules') loadRules();
+  if (target === 'system') loadSystem();
 });
 
 function loadIframe(botId) {
@@ -1235,21 +1244,23 @@ async function loadRules() {
 
   const el = document.getElementById('rulesContent');
 
-  // Fetch sports config + BTC Range config + BTC Momentum config in parallel
-  const [sportsRes, btcRes, momRes] = await Promise.allSettled([
+  // Fetch sports config + BTC Range config + BTC Momentum config + bounce-back status in parallel
+  const [sportsRes, btcRes, momRes, bbRes] = await Promise.allSettled([
     fetch('/proxy/sports-arb/api/config', {headers: {'Authorization': 'Basic ' + btoa('admin:changeme123')}}).then(r => r.ok ? r.json() : null),
     fetch('/proxy/btc-range/api/bot/config').then(r => r.ok ? r.json() : null),
     fetch('/proxy/btc-momentum/api/bot/config').then(r => r.ok ? r.json() : null),
+    fetch('/proxy/bounce-back/api/status').then(r => r.ok ? r.json() : null),
   ]);
 
   const sportsConfig = sportsRes.status === 'fulfilled' ? sportsRes.value : null;
   const btcConfig    = btcRes.status === 'fulfilled' ? btcRes.value : null;
   const momConfig    = momRes.status === 'fulfilled' ? momRes.value : null;
+  const bbStatus     = bbRes.status === 'fulfilled' ? bbRes.value : null;
 
-  el.innerHTML = renderRules(sportsConfig, btcConfig, momConfig);
+  el.innerHTML = renderRules(sportsConfig, btcConfig, momConfig, bbStatus);
 }
 
-function renderRules(sports, btc, mom) {
+function renderRules(sports, btc, mom, bb) {
   let html = '';
 
   // ---- Sports Arb Section ----
@@ -1277,7 +1288,54 @@ function renderRules(sports, btc, mom) {
   html += '</div>';
   html += '</div>';
 
+  // ---- Bounce-Back Section ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Bounce-Back Arb — Bot Config</div>';
+  html += '<div class="rules-grid">';
+  html += renderBounceBackCard(bb);
+  html += '</div>';
+  html += '</div>';
+
   return html;
+}
+
+function renderBounceBackCard(status) {
+  const mode = status ? (status.mode || 'paper').toUpperCase() : '?';
+  const alive = status && status.running;
+  const color = '#06b6d4';
+
+  return `<div class="rules-card" style="border-top:3px solid ${color};max-width:520px">
+    <div class="rules-card-header">
+      <span class="rules-card-title">Bounce-Back</span>
+      <span class="sub-card-badge">${mode}</span>
+    </div>
+
+    <div class="rules-subhead">📖 Strategy Overview</div>
+    <div style="font-size:.8rem;color:var(--text-dim);line-height:1.6;margin-bottom:.75rem">
+      Monitors BTC, ETH, and SOL Kalshi 15-min contracts for sharp intra-window price drops.
+      When a contract falls ≥ 8¢ between minutes 4–6 of a window, the bot bets on a bounce-back
+      — buying the oversold side with the expectation prices revert before settlement.
+    </div>
+
+    <div class="rules-subhead">🔍 Signal Detection</div>
+    ${btcRow('Assets', 'BTC &nbsp;|&nbsp; ETH &nbsp;|&nbsp; SOL', 'Three Kalshi 15-min contracts tracked simultaneously.')}
+    ${btcRow('Move Threshold', '≥ 8¢ drop within entry window', 'Contract must fall at least 8 cents from window open before entry is considered.')}
+    ${btcRow('Entry Window', 'Minutes 4–6 of the 15-min window (240–360s)', 'Only enters in the first half of the window. Avoids entries too close to settlement.')}
+
+    <div class="rules-subhead">📐 Position Sizing</div>
+    ${btcRow('Contracts', '5 per trade', 'Fixed position size — no tier scaling.')}
+    ${btcRow('Capital Guard', 'Portal allocation enforced', 'Checks portal /api/capital/bounce-back/limit before every order.')}
+
+    <div class="rules-subhead">🚪 Exit</div>
+    ${btcRow('Exit Strategy', 'Hold to settlement', 'No active exit logic — position settles at window close. Bot relies on mean-reversion completing naturally.')}
+    ${btcRow('Duplicate Guard', 'One trade per asset per window', '_entered_windows set prevents re-entry in the same 15-min contract.')}
+
+    <div class="rules-subhead">📡 Data Source</div>
+    ${btcRow('Price Feed', 'Kalshi contract bid/ask (polled every 15s)', 'Compares current contract bid to opening bid to detect the move.')}
+    ${btcRow('Settlement', 'Kalshi 15-min contract window close', 'Win if price reverts; lose if it continues down.')}
+
+    ${!alive ? '<div class="rules-stopped" style="margin-top:.75rem">⚠ Bot unreachable</div>' : ''}
+  </div>`;
 }
 
 function renderSportCard(sport, cfg) {
@@ -1500,6 +1558,145 @@ function getEdgeDecay(sport) {
   if (!card) return {};
   const inputs = [...card.querySelectorAll('input[type=number]')];
   return {enabled: true, tighten_hours: parseFloat(inputs.at(-2)?.value||2), tighten_factor: parseFloat(inputs.at(-1)?.value||0.7)};
+}
+
+// ============================================================
+// SYSTEM TAB
+// ============================================================
+let _systemLoaded = false;
+let _systemInterval = null;
+
+async function loadSystem(force) {
+  if (_systemLoaded && !force) return;
+  _systemLoaded = true;
+
+  const el = document.getElementById('systemContent');
+  try {
+    const data = await fetch('/api/system', {headers: {'Authorization': 'Basic ' + btoa('admin:changeme123')}}).then(r => r.json());
+    el.innerHTML = renderSystem(data);
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);padding:2rem">Failed to load system info: ${e.message}</div>`;
+  }
+}
+
+function renderSystem(d) {
+  const res = d.resources || {};
+  const disk = res.disk || {};
+  const memPct = res.mem_total_mb ? Math.round(res.mem_used_mb / res.mem_total_mb * 100) : 0;
+  const diskPct = disk.pct || 0;
+
+  function bar(pct, warn=70, danger=85) {
+    const color = pct >= danger ? 'var(--red)' : pct >= warn ? 'var(--yellow)' : 'var(--green)';
+    return `<div style="background:#1e2a3a;border-radius:4px;height:6px;margin-top:4px">
+      <div style="background:${color};height:6px;border-radius:4px;width:${pct}%"></div>
+    </div>`;
+  }
+
+  let html = '';
+
+  // ---- Host Resources ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Host Resources</div>';
+  html += '<div class="rules-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">';
+
+  html += `<div class="rules-card" style="border-top:3px solid #3b82f6">
+    <div class="rules-card-title" style="margin-bottom:.5rem">Memory</div>
+    <div style="font-size:1.4rem;font-weight:700">${res.mem_used_mb || 0} <span style="font-size:.8rem;color:var(--text-dim)">/ ${res.mem_total_mb || 0} MB</span></div>
+    ${bar(memPct)}
+    <div style="font-size:.75rem;color:var(--text-dim);margin-top:.25rem">${memPct}% used</div>
+  </div>`;
+
+  html += `<div class="rules-card" style="border-top:3px solid #8b5cf6">
+    <div class="rules-card-title" style="margin-bottom:.5rem">Disk (/)</div>
+    <div style="font-size:1.4rem;font-weight:700">${disk.used_gb || 0} <span style="font-size:.8rem;color:var(--text-dim)">/ ${disk.total_gb || 0} GB</span></div>
+    ${bar(diskPct)}
+    <div style="font-size:.75rem;color:var(--text-dim);margin-top:.25rem">${diskPct}% used</div>
+  </div>`;
+
+  // Services
+  for (const svc of (d.services || [])) {
+    const color = svc.active === true ? 'var(--green)' : svc.active === false ? 'var(--red)' : 'var(--text-dim)';
+    const label = svc.active === true ? 'active' : svc.active === false ? 'inactive' : 'unknown';
+    html += `<div class="rules-card" style="border-top:3px solid ${svc.active ? '#22c55e' : '#ef4444'}">
+      <div class="rules-card-title" style="margin-bottom:.5rem">${svc.name}</div>
+      <div style="font-size:1.1rem;font-weight:700;color:${color}">${label}</div>
+    </div>`;
+  }
+  html += '</div></div>';
+
+  // ---- Docker Containers ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Docker Containers</div>';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">';
+  html += `<thead><tr style="border-bottom:1px solid #1e2a3a;color:var(--text-dim)">
+    <th style="text-align:left;padding:.5rem .75rem">Container</th>
+    <th style="text-align:left;padding:.5rem .75rem">Status</th>
+    <th style="text-align:left;padding:.5rem .75rem">Port</th>
+    <th style="text-align:left;padding:.5rem .75rem">Image</th>
+    <th style="text-align:left;padding:.5rem .75rem">Description</th>
+  </tr></thead><tbody>`;
+
+  for (const c of (d.containers || [])) {
+    if (c.error) { html += `<tr><td colspan="5" style="color:var(--red);padding:.5rem .75rem">${c.error}</td></tr>`; continue; }
+    const dot = c.running ? '🟢' : '🔴';
+    const color = c.bot ? c.bot.color : '#888';
+    const desc = c.bot ? c.bot.description : '—';
+    const portStr = c.ports ? c.ports.replace('127.0.0.1:', '').replace('/tcp','') : '—';
+    html += `<tr style="border-bottom:1px solid #111820">
+      <td style="padding:.5rem .75rem;font-weight:600;color:${color}">${dot} ${c.name}</td>
+      <td style="padding:.5rem .75rem;color:${c.running?'var(--green)':'var(--red)'}">${c.status}</td>
+      <td style="padding:.5rem .75rem;color:var(--text-dim)">${portStr}</td>
+      <td style="padding:.5rem .75rem;color:var(--text-dim)">${c.image}</td>
+      <td style="padding:.5rem .75rem;color:var(--text-dim)">${desc}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div></div>';
+
+  // ---- Cron Jobs ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Scheduled Jobs (cron)</div>';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem">';
+  html += `<thead><tr style="border-bottom:1px solid #1e2a3a;color:var(--text-dim)">
+    <th style="text-align:left;padding:.5rem .75rem">Schedule</th>
+    <th style="text-align:left;padding:.5rem .75rem">Job</th>
+    <th style="text-align:left;padding:.5rem .75rem">Script</th>
+    <th style="text-align:left;padding:.5rem .75rem">Purpose</th>
+  </tr></thead><tbody>`;
+
+  for (const job of (d.cron_jobs || [])) {
+    html += `<tr style="border-bottom:1px solid #111820">
+      <td style="padding:.5rem .75rem;font-family:monospace;color:var(--yellow)">${job.schedule}</td>
+      <td style="padding:.5rem .75rem;font-weight:600">${job.label}</td>
+      <td style="padding:.5rem .75rem;color:var(--text-dim);font-family:monospace;font-size:.75rem">${job.script}</td>
+      <td style="padding:.5rem .75rem;color:var(--text-dim)">${job.description}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div></div>';
+
+  // ---- Data Files ----
+  html += '<div class="rules-section">';
+  html += '<div class="rules-section-title">Key Data Files &amp; Paths</div>';
+  const files = [
+    {path: 'btc-range-arb/data/window_summary.jsonl', desc: 'BTC window logger — ~102 fields/row, synced to Google Drive daily', color: '#f7931a'},
+    {path: 'btc-range-arb/data/price_feed.jsonl',     desc: 'BTC/ETH/SOL spot + contract prices at 1s intervals', color: '#f7931a'},
+    {path: 'sports-arb/logs/',                         desc: 'Sports-arb trade and event logs', color: '#8b5cf6'},
+    {path: 'sports-arb/data/',                         desc: 'Game mappings, correlation state, scoring data', color: '#8b5cf6'},
+    {path: 'bounce-back/data/',                        desc: 'Bounce-back trade log (JSONL)', color: '#06b6d4'},
+    {path: 'portal/data/capital.json',                 desc: 'Capital allocations and virtual ledger', color: '#3b82f6'},
+  ];
+  html += '<div class="rules-grid" style="grid-template-columns:1fr">';
+  for (const f of files) {
+    html += `<div style="display:flex;align-items:flex-start;gap:.75rem;padding:.6rem .75rem;border-radius:6px;background:#0d1520;border-left:3px solid ${f.color}">
+      <span style="font-family:monospace;font-size:.78rem;color:var(--accent);white-space:nowrap">/home/ubuntu/kalshi-bots/${f.path}</span>
+      <span style="font-size:.78rem;color:var(--text-dim)">${f.desc}</span>
+    </div>`;
+  }
+  html += '</div></div>';
+
+  // refresh timestamp
+  html += `<div style="font-size:.72rem;color:#333;text-align:right;padding:.5rem 1rem">Last updated: ${new Date().toLocaleTimeString()}</div>`;
+
+  return html;
 }
 
 async function saveSportField(sport, field, value) {

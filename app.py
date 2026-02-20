@@ -593,6 +593,102 @@ def claude_chat():
 
 
 # ---------------------------------------------------------------------------
+# System info
+# ---------------------------------------------------------------------------
+
+@app.route("/api/system")
+@_auth_required
+def api_system():
+    """Return Docker container statuses, cron jobs, and host resource usage."""
+    import shutil
+
+    # Docker containers — query via Docker socket API
+    containers = []
+    try:
+        import http.client, urllib.parse
+        conn = http.client.HTTPConnection("localhost")
+        conn.sock = __import__('socket').socket(__import__('socket').AF_UNIX, __import__('socket').SOCK_STREAM)
+        conn.sock.connect("/var/run/docker.sock")
+        conn.request("GET", "/containers/json?all=true")
+        resp = conn.getresponse()
+        raw = json.loads(resp.read())
+        for c in raw:
+            name = c.get("Names", ["?"])[0].lstrip("/")
+            status = c.get("Status", "")
+            image = c.get("Image", "")
+            running = c.get("State", "") == "running"
+            ports_list = c.get("Ports", [])
+            port_str = ", ".join(
+                f"{p.get('PublicPort','?')}→{p.get('PrivatePort','?')}"
+                for p in ports_list if p.get("PublicPort")
+            ) or "—"
+            bot_meta = next((
+                {"id": bid, "color": b.get("color","#888"), "description": b.get("description","")}
+                for bid, b in BOTS.items() if b.get("host","") == name
+            ), None)
+            containers.append({
+                "name": name, "status": status, "ports": port_str,
+                "image": image, "running": running, "bot": bot_meta,
+            })
+        conn.close()
+    except Exception as e:
+        containers = [{"error": str(e)}]
+
+    # Cron jobs
+    cron_jobs = [
+        {"schedule": "*/5 * * * *",  "label": "Memory Watchdog",        "script": "memory_watchdog.sh",                "description": "Monitors RAM; alerts Discord at 80%/90%, auto-restarts at 95%"},
+        {"schedule": "*/15 * * * *", "label": "Sports Status Report",   "script": "sports-arb/status_report.sh",        "description": "Periodic sports-arb health snapshot"},
+        {"schedule": "59 7 * * *",   "label": "BTC Data → Google Drive","script": "btc-range-arb/sync_to_gdrive.sh",    "description": "Daily upload of window_summary.jsonl to Google Drive (08:00 UTC)"},
+        {"schedule": "59 7 * * *",   "label": "Sports Scoring → Drive", "script": "sports-arb/sync_scoring_to_gdrive.sh","description": "Daily upload of sports scoring data to Google Drive (08:00 UTC)"},
+    ]
+
+    # Infrastructure services — infer from what's reachable inside container
+    import socket as _socket
+    services = []
+    # Docker: active if we successfully talked to the socket above
+    services.append({"name": "docker", "active": not any("error" in c for c in containers)})
+    # nginx: try TCP connect to host port 80
+    try:
+        s = _socket.create_connection(("host.docker.internal", 80), timeout=2)
+        s.close()
+        services.append({"name": "nginx", "active": True})
+    except Exception:
+        services.append({"name": "nginx", "active": False})
+
+    # Host resources
+    mem_info = {}
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split(":")
+                mem_info[k.strip()] = int(v.strip().split()[0])
+        total_mb = mem_info.get("MemTotal", 0) // 1024
+        avail_mb = mem_info.get("MemAvailable", 0) // 1024
+        used_mb  = total_mb - avail_mb
+    except Exception:
+        total_mb = used_mb = avail_mb = 0
+
+    disk = {}
+    try:
+        usage = shutil.disk_usage("/")
+        disk = {
+            "total_gb": round(usage.total / 1e9, 1),
+            "used_gb":  round(usage.used  / 1e9, 1),
+            "free_gb":  round(usage.free  / 1e9, 1),
+            "pct":      round(usage.used / usage.total * 100, 1),
+        }
+    except Exception:
+        pass
+
+    return jsonify({
+        "containers": containers,
+        "cron_jobs":  cron_jobs,
+        "services":   services,
+        "resources":  {"mem_total_mb": total_mb, "mem_used_mb": used_mb, "mem_avail_mb": avail_mb, "disk": disk},
+    })
+
+
+# ---------------------------------------------------------------------------
 # Index
 # ---------------------------------------------------------------------------
 
