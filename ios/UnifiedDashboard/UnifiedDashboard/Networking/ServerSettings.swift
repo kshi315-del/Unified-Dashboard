@@ -4,6 +4,10 @@ class ServerSettings: ObservableObject {
     private static let serverURLKey = "serverURL"
     private static let usernameKey = "portalUsername"
     private static let passwordKey = "portalPassword"
+    private static let sshHostKey = "sshHost"
+    private static let sshPortKey = "sshPort"
+    private static let sshUserKey = "sshUsername"
+    private static let sshPasswordKey = "sshPassword"
 
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: Self.serverURLKey) }
@@ -15,6 +19,26 @@ class ServerSettings: ObservableObject {
 
     @Published var password: String {
         didSet { KeychainHelper.save(password, for: Self.passwordKey) }
+    }
+
+    @Published var sshHost: String {
+        didSet { UserDefaults.standard.set(sshHost, forKey: Self.sshHostKey) }
+    }
+
+    @Published var sshPort: String {
+        didSet { UserDefaults.standard.set(sshPort, forKey: Self.sshPortKey) }
+    }
+
+    @Published var sshUser: String {
+        didSet { KeychainHelper.save(sshUser, for: Self.sshUserKey) }
+    }
+
+    @Published var sshPassword: String {
+        didSet { KeychainHelper.save(sshPassword, for: Self.sshPasswordKey) }
+    }
+
+    var hasSSHCredentials: Bool {
+        !sshHost.isEmpty && !sshUser.isEmpty && !sshPassword.isEmpty
     }
 
     var baseURL: URL? {
@@ -64,5 +88,10 @@ class ServerSettings: ObservableObject {
 
         self.username = KeychainHelper.load(for: Self.usernameKey) ?? ""
         self.password = KeychainHelper.load(for: Self.passwordKey) ?? ""
+
+        self.sshHost = UserDefaults.standard.string(forKey: Self.sshHostKey) ?? ""
+        self.sshPort = UserDefaults.standard.string(forKey: Self.sshPortKey) ?? "22"
+        self.sshUser = KeychainHelper.load(for: Self.sshUserKey) ?? ""
+        self.sshPassword = KeychainHelper.load(for: Self.sshPasswordKey) ?? ""
     }
 }

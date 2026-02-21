@@ -73,6 +73,10 @@ struct TerminalView: View {
                         url: termURL,
                         authHeader: settings.basicAuthHeader,
                         serverHost: base.host,
+                        sshHost: settings.sshHost,
+                        sshPort: settings.sshPort,
+                        sshUser: settings.sshUser,
+                        sshPassword: settings.sshPassword,
                         onFinishLoading: {
                             withAnimation { isLoading = false }
                         },
@@ -113,6 +117,10 @@ struct TerminalWebView: UIViewRepresentable {
     let url: URL
     let authHeader: String?
     let serverHost: String?
+    var sshHost: String = ""
+    var sshPort: String = "22"
+    var sshUser: String = ""
+    var sshPassword: String = ""
     var onFinishLoading: (() -> Void)? = nil
     var onError: ((String) -> Void)? = nil
 
@@ -135,8 +143,37 @@ struct TerminalWebView: UIViewRepresentable {
         style.textContent = 'html, body { background-color: #0a0e14 !important; }';
         document.documentElement.appendChild(style);
         """
-        let script = WKUserScript(source: darkCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
-        config.userContentController.addUserScript(script)
+        let cssScript = WKUserScript(source: darkCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        config.userContentController.addUserScript(cssScript)
+
+        // If SSH credentials are saved, auto-fill and auto-connect
+        if !sshHost.isEmpty && !sshUser.isEmpty && !sshPassword.isEmpty {
+            let escapedHost = sshHost.replacingOccurrences(of: "'", with: "\\'")
+            let escapedPort = sshPort.replacingOccurrences(of: "'", with: "\\'")
+            let escapedUser = sshUser.replacingOccurrences(of: "'", with: "\\'")
+            let escapedPass = sshPassword.replacingOccurrences(of: "'", with: "\\'")
+            let autoConnect = """
+            (function() {
+                function tryAutoConnect() {
+                    var hostEl = document.getElementById('ssh-host');
+                    var portEl = document.getElementById('ssh-port');
+                    var userEl = document.getElementById('ssh-user');
+                    var passEl = document.getElementById('ssh-pass');
+                    var form = document.getElementById('connect-form');
+                    if (!hostEl || !form) { setTimeout(tryAutoConnect, 100); return; }
+                    hostEl.value = '\(escapedHost)';
+                    portEl.value = '\(escapedPort)';
+                    userEl.value = '\(escapedUser)';
+                    passEl.value = '\(escapedPass)';
+                    form.dispatchEvent(new Event('submit', {cancelable: true}));
+                }
+                if (document.readyState === 'complete') tryAutoConnect();
+                else window.addEventListener('load', tryAutoConnect);
+            })();
+            """
+            let autoScript = WKUserScript(source: autoConnect, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            config.userContentController.addUserScript(autoScript)
+        }
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false

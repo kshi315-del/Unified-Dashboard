@@ -285,6 +285,83 @@ struct SettingsView: View {
                 }
                 .cardStyle()
 
+                // SSH
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "SSH TERMINAL", icon: "apple.terminal")
+                    Text("Saved credentials auto-connect in the Terminal tab")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color.textDim.opacity(0.6))
+
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Host")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Color.textDim)
+                            TextField("192.168.1.100", text: $settings.sshHost)
+                                .font(.system(.body, design: .monospaced))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .padding(14)
+                                .background(Color.elevatedBg)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.cardBorder, lineWidth: 1)
+                                )
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Port")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Color.textDim)
+                            TextField("22", text: $settings.sshPort)
+                                .font(.system(.body, design: .monospaced))
+                                .keyboardType(.numberPad)
+                                .padding(14)
+                                .background(Color.elevatedBg)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.cardBorder, lineWidth: 1)
+                                )
+                                .frame(width: 80)
+                        }
+                    }
+
+                    TextField("Username", text: $settings.sshUser)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
+
+                    SecureField("Password", text: $settings.sshPassword)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(14)
+                        .background(Color.elevatedBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cardBorder, lineWidth: 1)
+                        )
+
+                    if settings.hasSSHCredentials {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 11))
+                            Text("Credentials saved to Keychain")
+                                .font(.system(size: 11, design: .monospaced))
+                        }
+                        .foregroundStyle(Color.portalGreen)
+                    }
+                }
+                .cardStyle()
+
                 // Security
                 VStack(alignment: .leading, spacing: 10) {
                     SectionHeader(title: "SECURITY", icon: "lock.shield")
