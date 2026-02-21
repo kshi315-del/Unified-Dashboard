@@ -697,7 +697,7 @@ def api_system():
 # SSH Terminal
 # ---------------------------------------------------------------------------
 
-SSH_HOST = os.environ.get("SSH_HOST", "localhost")
+SSH_HOST = os.environ.get("SSH_HOST", BOT_HOST)
 SSH_PORT = int(os.environ.get("SSH_PORT", "22"))
 SSH_USER = os.environ.get("SSH_USER", "")
 SSH_PASSWORD = os.environ.get("SSH_PASSWORD", "")
